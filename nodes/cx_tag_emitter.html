@@ -1,0 +1,302 @@
+
+<!-- ############################### CONFIG ################################# -->
+
+<!--<script type="text/html" data-template-name="master_config1">-->
+<!--  <div class="form-row">-->
+<!--    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>-->
+<!--    <input type="text" id="node-config-input-name" placeholder="Name">-->
+<!--  </div>-->
+<!--  <div class="form-row">-->
+<!--    <label for="node-config-input-slaveQty"> Slaves Qty</label>-->
+<!--    <input type="text" id="node-config-input-slaveQty" placeholder="eg 1">-->
+<!--  </div>-->
+<!--  <div class="form-row">-->
+<!--    <label for="node-config-input-frequencyHz">Frequency</label>-->
+<!--    <input type="text" id="node-config-input-frequencyHz" placeholder="eg 2000">-->
+<!--  </div>-->
+<!--  <div class="form-tips">Frequency is in Hz. Higher value creates high CPU load.</div>-->
+<!--  <br>-->
+<!--  <div class="form-tips">Restart Node-RED after changing any of these parameters.-->
+<!--    <code>0</code> slaves will stop the master. If master stopped, changing increasing-->
+<!--    number of slaves will start Master without restart.</div>-->
+<!--</script>-->
+
+<!--<script type="text/html" data-help-name="master_config1">-->
+<!--  <pre>-->
+<!--    Have to restart Node-RED after changing number of slaves.-->
+<!--  </pre>-->
+<!--</script>-->
+
+<script type="text/javascript">
+  // RED.nodes.registerType("master_config", {
+  //   category: "config",
+  //   defaults: {
+  //     name: {value: ""},
+  //     slaveQty: {value: 1, required: true, validate: RED.validators.number()},
+  //     frequencyHz: {value: 2000, required: true, validate: RED.validators.number()},
+  //   },
+  //   label: function() {
+  //     return this.name || "MotionLinx Slaves:" + this.slaveQty;
+  //   },
+  //   // oneditprepare: function() {
+  //   //   const hz = $('#node-input-frequencyHz');
+  //   //   if (!hz.val()) hz.val(2000);
+  //   // }
+  // });
+</script>
+
+
+
+
+<!-- ############################### BATCH IN ################################# -->
+
+<script type="text/javascript">
+  RED.nodes.registerType("tags_in", {
+    category: "CX Tags",
+    color: "#4db6ac",
+    defaults: {
+      name: {value: ""},
+      isBatch: {value: false},
+      tagName: {value: ""},
+      desc: {value: ""},
+      dType: {value: "number"},
+    },
+    inputs: 1,
+    outputs: 0,
+    icon: "link-out.png",
+    paletteLabel: "Tags In",
+    label: function() {
+      return this.name || ( this.isBatch ? "Batch In" : (this.tagName || "Tag In"));
+    },
+    oneditprepare: function() {
+
+      const tagInGroupEl = $('#node-input-group-tag-in');
+      const isBatchEl = $('#node-input-isBatch');
+      const dTypeEl = $("#node-input-dType");
+
+      checkBatchStatus();
+
+      isBatchEl.on("change", function() {
+        checkBatchStatus();
+      })
+
+      dTypeEl.typedInput({
+        types: [
+          {
+            value: "number",
+            options: [
+              { value: "number", label: "number"},
+              { value: "boolean", label: "boolean"},
+              { value: "string", label: "string"},
+            ]
+          }
+        ]
+      })
+
+
+
+
+
+      function checkBatchStatus() {
+        if (isBatchEl.is(':checked')) tagInGroupEl.hide();
+        else tagInGroupEl.show();
+      }
+
+    }
+  });
+</script>
+
+<script type="text/html" data-template-name="tags_in">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-isBatch">Tags Batch1</label>
+    <input type="checkbox" id="node-input-isBatch" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
+  </div>
+  <div id="node-input-group-tag-in">
+    <div class="form-row">
+      <label for="node-input-tagName">Tag name</label>
+      <input type="text" id="node-input-tagName" placeholder="SysOk_S">
+    </div>
+    <div class="form-row">
+      <label for="node-input-desc">Description</label>
+      <input type="text" id="node-input-desc" placeholder="System Healthy Status">
+    </div>
+    <div class="form-row">
+      <label for="node-input-dType">Data type</label>
+      <input type="text" id="node-input-dType">
+    </div>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="tags_in">
+  <h3>Inputs</h3>
+  <pre style="overflow-x: scroll; white-space: pre;">
+payload: {
+  tagName: value, // number or boolean
+}
+  </pre>
+  <p>OR</p>
+  <pre style="overflow-x: scroll; white-space: pre;">
+payload: {
+  value, // number or boolean
+},
+topic: string // tag name
+  </pre>
+</script>
+
+
+
+<!-- ############################### VALUE EMITTER ################################# -->
+
+<script type="text/javascript">
+  RED.nodes.registerType("value_emitter", {
+    category: "CX Tags",
+    color: "#4db6ac",
+    defaults: {
+      name: {value: ""},
+      allChanges: {value: false},
+      tagName: {value: "", required: true},
+      emitOnStart: {value: true},
+    },
+    inputs: 0,
+    outputs: 1,
+    icon: "link-out.png",
+    paletteLabel: "Emit tag",
+    label: function() {
+      return this.name || (this.tagName.includes(",") ? "Emits:__batch" : "Emits:" + this.tagName);
+    },
+    oneditprepare: function () {
+      $.getJSON('__cx_tag_emitter/get_variables?config_id=' + this.id, function(data) {
+        if (!data) return;
+        $("#node-input-tag-name-list").text(data.join("\n"))
+      });
+    }
+  });
+</script>
+
+<script type="text/html" data-template-name="value_emitter">
+<!--  <div class="form-row">-->
+<!--    <label for="node-input-master"><i class="fa fa-bolt"></i> Master Config</label>-->
+<!--    <input type="text" id="node-input-master" placeholder="Master Config">-->
+<!--  </div>-->
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-tagName">Tag name</label>
+    <input type="text" id="node-input-tagName" placeholder="SysOk_S">
+  </div>
+  <div class="form-row">
+    <label for="node-input-emitOnStart">Emit On Start</label>
+    <input type="checkbox" id="node-input-emitOnStart" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
+  </div>
+  <div class="form-row">
+    <label for="node-input-tagName">Tag List</label>
+    <code style="display: block; white-space: pre-wrap; height: 300px" id="node-input-tag-name-list"></code>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="value_emitter">
+  <p>TODO</p>
+</script>
+
+
+
+
+
+
+
+
+<!-- ############################### STATUS ################################# -->
+
+<script type="text/javascript">
+  // RED.nodes.registerType("motionlinx_status1", {
+  //   category: "CX MotionLinx",
+  //   color: "#e5b3fe",
+  //   defaults: {
+  //     master: {value: "", type: "master_config", required: true},
+  //     name: {value: ""},
+  //     device: {value: "master", required: true},
+  //     controller: {value: "0", validate: RED.validators.number()},
+  //     index: {value: "0x3000"}
+  //   },
+  //   inputs: 1,
+  //   outputs: 1,
+  //   icon: "link-out.png",
+  //   paletteLabel: "Status",
+  //   label: function() { return this.name || "Status" },
+  //   labelStyle: function() { return this.name ? "node_label_italic" : ""},
+  //   oneditprepare: function() {
+  //     $("#node-input-device").on("change", function() {
+  //       if ($(this).val() === "master") {
+  //         $("#motionlinx-status-input-controller").hide();
+  //         $("#motionlinx-status-input-index").hide();
+  //       }
+  //       else {
+  //         $("#motionlinx-status-input-controller").show();
+  //         $("#motionlinx-status-input-index").show();
+  //       }
+  //     });
+  //   },
+  // });
+</script>
+
+<!--<script type="text/html" data-template-name="motionlinx_status1">-->
+<!--  <div class="form-row">-->
+<!--    <label for="node-input-master"><i class="fa fa-bolt"></i> Master Config</label>-->
+<!--    <input type="text" id="node-input-master" placeholder="Master Config">-->
+<!--  </div>-->
+<!--  <div class="form-row">-->
+<!--    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>-->
+<!--    <input type="text" id="node-input-name" placeholder="Name">-->
+<!--  </div>-->
+<!--  <div class="form-row">-->
+<!--    <label for="node-input-device"><i class="fa fa-list"></i> Device</label>-->
+<!--    <select id="node-input-device" style="width:250px">-->
+<!--      <option value="master">Master</option>-->
+<!--      <option value="controller">Controller</option>-->
+<!--    </select>-->
+<!--  </div>-->
+<!--  <div class="form-row" id="motionlinx-status-input-controller">-->
+<!--    <label for="node-input-controller"><i class="fa fa-arrows-h"></i> Controller</label>-->
+<!--    <input type="text" id="node-input-controller" placeholder="eg 0">-->
+<!--  </div>-->
+<!--  <div class="form-row" id="motionlinx-status-input-index">-->
+<!--    <label for="node-input-index"><i class="fa fa-list"></i> Device</label>-->
+<!--    <select id="node-input-index">-->
+<!--      <option value="0x3000">All Sensors - 0x3000</option>-->
+<!--      <option value="0x3001">Servo State L - 0x3001</option>-->
+<!--      <option value="0x3006">Servo State R - 0x3006</option>-->
+<!--      <option value="0x3004">Diagnostic L - 0x3004</option>-->
+<!--      <option value="0x3005">Diagnostic R - 0x3005</option>-->
+<!--      <option value="0x3013">System Diagnostic - 0x3013</option>-->
+<!--    </select>-->
+<!--  </div>-->
+<!--</script>-->
+
+<!--<script type="text/html" data-help-name="motionlinx_status1">-->
+<!--  <p>Set/Get a parameter to the controller</p>-->
+<!--  <h3>Inputs</h3>-->
+<!--  <dl class="message-properties">-->
+<!--    <dt>payload<span class="property-type">object</span></dt>-->
+<!--    <dd>-->
+<!--      method: set | get; param: number, value: number, controller: number-->
+<!--    </dd>-->
+<!--  </dl>-->
+<!--  <dl class="message-properties">-->
+<!--    <dt>payload<span class="property-type">string</span></dt>-->
+<!--    <dd>-->
+<!--      Command:<br>-->
+<!--       - slaves<br>-->
+<!--       - domain-->
+<!--    </dd>-->
+<!--    <dt>topic<span class="property-type">string</span></dt>-->
+<!--    <dd>-->
+<!--      __ethercat_status__-->
+<!--    </dd>-->
+<!--  </dl>-->
+<!--</script>-->

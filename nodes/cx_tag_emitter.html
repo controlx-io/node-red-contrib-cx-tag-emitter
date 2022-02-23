@@ -148,4 +148,20 @@ topic: string // tag name
 
 <script type="text/html" data-help-name="value_emitter">
   <p>TODO</p>
+  <p>Out if only one tag</p>
+  <pre>
+{
+    [tagName: string]: tagValue
+}
+  </pre>
+  <p>Out for a batch</p>
+  <pre>
+{
+    topic: "__batch",
+    payload: {
+        [tagName: string]: tagValue
+    }
+}
+  </pre>
+
 </script>

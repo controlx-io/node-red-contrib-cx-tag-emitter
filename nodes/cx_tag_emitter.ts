@@ -67,6 +67,8 @@ module.exports = function (RED: NodeRedApp) {
             return;
         }
 
+        // TODO add option "emit all changed"
+
         const tagNames = config.tagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
         if (!tagNames.length) return;
 
@@ -174,7 +176,13 @@ module.exports = function (RED: NodeRedApp) {
         function buildChange(tagName: string, newValue: any, tagStorage: ITagStorage, change: ITagStorage, isBatch: boolean) {
             const currentValue = tagStorage[tagName] ? tagStorage[tagName].value : undefined;
 
-            if (!currentValue || isDifferent(newValue, currentValue)) {
+            if (currentValue == null || isDifferent(newValue, currentValue)) {
+
+                if (currentValue && tagStorage[tagName].sourceNodeId !== node.id) {
+                    node.warn(`Tag ${tagName} changed by two different sources. ` +
+                        `From ${tagStorage[tagName].sourceNodeId} to ${node.id}`);
+                }
+
                 change[tagName] = {
                     tagName,
                     sourceNodeId: node.id,

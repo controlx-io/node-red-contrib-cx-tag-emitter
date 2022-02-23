@@ -119,7 +119,11 @@ module.exports = function (RED) {
         });
         function buildChange(tagName, newValue, tagStorage, change, isBatch) {
             const currentValue = tagStorage[tagName] ? tagStorage[tagName].value : undefined;
-            if (!currentValue || isDifferent(newValue, currentValue)) {
+            if (currentValue == null || isDifferent(newValue, currentValue)) {
+                if (currentValue && tagStorage[tagName].sourceNodeId !== node.id) {
+                    node.warn(`Tag ${tagName} changed by two different sources. ` +
+                        `From ${tagStorage[tagName].sourceNodeId} to ${node.id}`);
+                }
                 change[tagName] = {
                     tagName,
                     sourceNodeId: node.id,

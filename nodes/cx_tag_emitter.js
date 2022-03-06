@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const events_1 = require("events");
 module.exports = function (RED) {
     const ALL_TAGS_STORAGE = "__ALL_TAGS__";
+    const CHANGES_TOPIC = "__CHANGES__";
     const eventEmitter = new events_1.EventEmitter();
     let lastCall_ms = 0;
     let at10msCounter = 0;
@@ -34,6 +35,12 @@ module.exports = function (RED) {
     function ValueEmitter(config) {
         RED.nodes.createNode(this, config);
         const node = this;
+        if (config.isToEmitAllChanges) {
+            eventEmitter.on(CHANGES_TOPIC, handleAnyTagChange);
+            if (config.emitOnStart)
+                RED.events.on("flows:started", handleOnStart);
+            return;
+        }
         if (!config.tagName || typeof config.tagName !== "string") {
             node.error("Tag Name is not provided");
             return;
@@ -47,12 +54,22 @@ module.exports = function (RED) {
             eventEmitter.on(tag, handleTagChanges);
         }
         if (config.emitOnStart)
-            RED.events.on("flows:started", () => {
-                tagNames.forEach(tag => handleTagChanges(tag, currentTags[tag]));
-            });
+            RED.events.on("flows:started", handleOnStart);
         node.on("close", () => {
+            RED.events.removeListener("flows:started", handleOnStart);
             tagNames.forEach(tag => eventEmitter.removeListener(tag, handleTagChanges));
+            eventEmitter.removeListener(CHANGES_TOPIC, handleAnyTagChange);
         });
+        function handleOnStart() {
+            if (config.isToEmitAllChanges) {
+                const currentTags = node.context().global.get(ALL_TAGS_STORAGE) || {};
+                if (Object.keys(currentTags).length)
+                    handleAnyTagChange(currentTags);
+            }
+            else {
+                tagNames.forEach(tag => handleTagChanges(tag, currentTags[tag]));
+            }
+        }
         function handleTagChanges(changedTag, tagChange) {
             if (!tagChange)
                 return;
@@ -76,6 +93,14 @@ module.exports = function (RED) {
             function sendNodeMessage(topic, payload) {
                 node.send({ topic, payload });
             }
+        }
+        function handleAnyTagChange(changes) {
+            const payload = {};
+            const tags = Object.keys(changes);
+            for (const tagName of tags) {
+                payload[tagName] = changes[tagName].value;
+            }
+            node.send({ topic: "__batch_all", payload });
         }
     }
     function TagsIn(config) {
@@ -110,12 +135,13 @@ module.exports = function (RED) {
                 const newValue = msg.payload;
                 buildChange(tagName, newValue, currentTags, change, false);
             }
-            if (!Object.keys(change))
+            if (!Object.keys(change).length)
                 return;
             node.context().global.set(ALL_TAGS_STORAGE, currentTags);
             for (const changedTag in change) {
                 eventEmitter.emit(changedTag, changedTag, change[changedTag]);
             }
+            eventEmitter.emit(CHANGES_TOPIC, change);
         });
         function buildChange(tagName, newValue, tagStorage, change, isBatch) {
             const currentValue = tagStorage[tagName] ? tagStorage[tagName].value : undefined;

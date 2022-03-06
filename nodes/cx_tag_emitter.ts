@@ -16,6 +16,7 @@ interface IValueEmitterConfig {
     name: string,
     tagName: string | number,
     emitOnStart: boolean,
+    isToEmitAllChanges: boolean,
 }
 
 interface IStorageTag extends ITagDefinition {
@@ -30,6 +31,7 @@ interface ITagStorage {
 module.exports = function (RED: NodeRedApp) {
 
     const ALL_TAGS_STORAGE = "__ALL_TAGS__";
+    const CHANGES_TOPIC = "__CHANGES__";
 
     const eventEmitter =  new EventEmitter();
 
@@ -62,12 +64,20 @@ module.exports = function (RED: NodeRedApp) {
         RED.nodes.createNode(this, config);
         const node = this;
 
+        if (config.isToEmitAllChanges) {
+            eventEmitter.on(CHANGES_TOPIC, handleAnyTagChange);
+
+            if (config.emitOnStart)
+                RED.events.on("flows:started", handleOnStart)
+
+            return;
+        }
+
         if (!config.tagName || typeof config.tagName !== "string") {
             node.error("Tag Name is not provided");
             return;
         }
 
-        // TODO add option "emit all changed"
 
         const tagNames = config.tagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
         if (!tagNames.length) return;
@@ -80,15 +90,26 @@ module.exports = function (RED: NodeRedApp) {
         }
 
         if (config.emitOnStart)
-            RED.events.on("flows:started", () => {
-                tagNames.forEach(tag => handleTagChanges(tag, currentTags[tag]));
-            })
+            RED.events.on("flows:started", handleOnStart)
 
         node.on("close", () => {
+            RED.events.removeListener("flows:started", handleOnStart);
             tagNames.forEach(tag => eventEmitter.removeListener(tag, handleTagChanges));
+            eventEmitter.removeListener(CHANGES_TOPIC, handleAnyTagChange)
         })
 
 
+        function handleOnStart() {
+            if (config.isToEmitAllChanges) {
+                const currentTags: ITagStorage = node.context().global.get(ALL_TAGS_STORAGE) || {};
+
+                if (Object.keys(currentTags).length)
+                    handleAnyTagChange(currentTags);
+
+            } else {
+                tagNames.forEach(tag => handleTagChanges(tag, currentTags[tag]));
+            }
+        }
 
         function handleTagChanges(changedTag: string, tagChange?: IStorageTag) {
             if (!tagChange) return;
@@ -117,6 +138,16 @@ module.exports = function (RED: NodeRedApp) {
             function sendNodeMessage(topic: string, payload: any) {
                 node.send({ topic, payload })
             }
+        }
+
+        function handleAnyTagChange(changes: ITagStorage) {
+            const payload: {[key: string]: any} = {};
+            const tags = Object.keys(changes);
+            for (const tagName of tags) {
+                payload[tagName] = changes[tagName].value
+            }
+
+            node.send({ topic: "__batch_all", payload})
         }
     }
 
@@ -163,12 +194,13 @@ module.exports = function (RED: NodeRedApp) {
             }
 
 
-            if (!Object.keys(change)) return;
+            if (!Object.keys(change).length) return;
 
             node.context().global.set(ALL_TAGS_STORAGE, currentTags);
             for (const changedTag in change) {
                 eventEmitter.emit(changedTag, changedTag, change[changedTag]);
             }
+            eventEmitter.emit(CHANGES_TOPIC, change);
         });
 
 

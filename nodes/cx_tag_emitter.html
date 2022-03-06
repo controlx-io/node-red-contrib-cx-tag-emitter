@@ -107,7 +107,7 @@ topic: string // tag name
     color: "#4db6ac",
     defaults: {
       name: {value: ""},
-      allChanges: {value: false},
+      isToEmitAllChanges: {value: false},
       tagName: {value: "", required: true},
       emitOnStart: {value: true},
     },
@@ -116,13 +116,33 @@ topic: string // tag name
     icon: "link-out.png",
     paletteLabel: "Emit tag",
     label: function() {
-      return this.name || (this.tagName.includes(",") ? "Emits:__batch" : "Emits:" + this.tagName);
+      return this.name || (
+        this.isToEmitAllChanges ?
+          "Emits:__batch_all" :
+          (this.tagName.includes(",") ? "Emits:__batch" : "Emits:" + this.tagName)
+      );
     },
     oneditprepare: function () {
-      $.getJSON('__cx_tag_emitter/get_variables?config_id=' + this.id, function(data) {
-        if (!data) return;
-        $("#node-input-tag-name-list").text(data.join("\n"))
-      });
+
+      const sectionEl = $('#node-input-section1');
+      const isToEmitAllChangesEl = $('#node-input-isToEmitAllChanges');
+
+      checkBatchStatus();
+
+      isToEmitAllChangesEl.on("change", function() {
+        checkBatchStatus();
+      })
+
+      function checkBatchStatus() {
+        if (isToEmitAllChangesEl.is(':checked')) sectionEl.hide();
+        else {
+          sectionEl.show();
+          $.getJSON('__cx_tag_emitter/get_variables?config_id=' + this.id, function(data) {
+            if (!data) return;
+            $("#node-input-tag-name-list").text(data.join("\n"))
+          });
+        }
+      }
     }
   });
 </script>
@@ -133,31 +153,49 @@ topic: string // tag name
     <input type="text" id="node-input-name" placeholder="Name">
   </div>
   <div class="form-row">
-    <label for="node-input-tagName">Tag name</label>
-    <input type="text" id="node-input-tagName" placeholder="SysOk_S">
+    <label for="node-input-isToEmitAllChanges"></label>
+    <input type="checkbox" id="node-input-isToEmitAllChanges" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
+    <span>Emit All Changes</span>
   </div>
   <div class="form-row">
-    <label for="node-input-emitOnStart">Emit On Start</label>
+    <label for="node-input-emitOnStart"></label>
     <input type="checkbox" id="node-input-emitOnStart" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
+    <span>Emit On Start</span>
   </div>
-  <div class="form-row">
-    <label for="node-input-tagName">Tag List</label>
-    <code style="display: block; white-space: pre-wrap; height: 300px" id="node-input-tag-name-list"></code>
+  <div id="node-input-section1">
+    <div class="form-row">
+      <label for="node-input-tagName">Tag name</label>
+      <input type="text" id="node-input-tagName" placeholder="SysOk_S">
+    </div>
+    <div class="form-row">
+      <label for="node-input-tagName">Tag List</label>
+      <code style="display: block; white-space: pre-wrap; height: 300px" id="node-input-tag-name-list"></code>
+    </div>
   </div>
 </script>
 
 <script type="text/html" data-help-name="value_emitter">
-  <p>TODO</p>
-  <p>Out if only one tag</p>
+  <p>Outputs</p>
+  <p>Out as only one tag</p>
   <pre>
 {
-    [tagName: string]: tagValue
+    topic: tagName as `string`
+    payload: tagValue as `any`
 }
   </pre>
-  <p>Out for a batch</p>
+  <p>Out as the batch</p>
   <pre>
 {
     topic: "__batch",
+    payload: {
+        [tagName: string]: tagValue
+    }
+}
+  </pre>
+  <p>All changes, same message structure even if one change</p>
+  <pre>
+{
+    topic: "__batch_all",
     payload: {
         [tagName: string]: tagValue
     }

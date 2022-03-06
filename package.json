@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-cx-tag-emitter",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "Emits tag values on change",
   "keywords": [
     "node-red",

@@ -37,8 +37,7 @@ module.exports = function (RED) {
         const node = this;
         if (config.isToEmitAllChanges) {
             eventEmitter.on(CHANGES_TOPIC, handleAnyTagChange);
-            if (config.emitOnStart)
-                RED.events.on("flows:started", handleOnStart);
+            setEmitterOnStart();
             return;
         }
         if (!config.tagName || typeof config.tagName !== "string") {
@@ -53,14 +52,17 @@ module.exports = function (RED) {
         for (const tag of tagNames) {
             eventEmitter.on(tag, handleTagChanges);
         }
-        if (config.emitOnStart)
-            RED.events.on("flows:started", handleOnStart);
+        setEmitterOnStart();
         node.on("close", () => {
-            RED.events.removeListener("flows:started", handleOnStart);
+            RED.events.removeListener("flows:started", emitOnStart);
             tagNames.forEach(tag => eventEmitter.removeListener(tag, handleTagChanges));
             eventEmitter.removeListener(CHANGES_TOPIC, handleAnyTagChange);
         });
-        function handleOnStart() {
+        function setEmitterOnStart() {
+            if (config.emitOnStart)
+                RED.events.on("flows:started", emitOnStart);
+        }
+        function emitOnStart() {
             if (config.isToEmitAllChanges) {
                 const currentTags = node.context().global.get(ALL_TAGS_STORAGE) || {};
                 if (Object.keys(currentTags).length)
@@ -69,6 +71,7 @@ module.exports = function (RED) {
             else {
                 tagNames.forEach(tag => handleTagChanges(tag, currentTags[tag]));
             }
+            RED.events.removeListener("flows:started", emitOnStart);
         }
         function handleTagChanges(changedTag, tagChange) {
             if (!tagChange)
@@ -107,11 +110,8 @@ module.exports = function (RED) {
         RED.nodes.createNode(this, config);
         const node = this;
         node.on("input", (msg) => {
-            if (!msg.topic || typeof msg.topic !== "string") {
-                node.error("Invalid Topic: " + JSON.stringify(msg.topic));
-                return;
-            }
             const isTooOften = checkIfTooOften();
+            lastCall_ms = Date.now();
             if (isTooOften) {
                 node.error("Emit cancelled, the node called TOO often!");
                 return;
@@ -129,12 +129,17 @@ module.exports = function (RED) {
                 }
             }
             else {
+                if (!msg.topic || typeof msg.topic !== "string") {
+                    node.error("Invalid Tag Name: " + JSON.stringify(msg.topic));
+                    return;
+                }
                 if (msg.payload == null)
                     return;
                 const tagName = config.tagName || msg.topic;
                 const newValue = msg.payload;
                 buildChange(tagName, newValue, currentTags, change, false);
             }
+            node.send(msg);
             if (!Object.keys(change).length)
                 return;
             node.context().global.set(ALL_TAGS_STORAGE, currentTags);
@@ -171,7 +176,6 @@ module.exports = function (RED) {
             at10msCounter = 0;
             return false;
         }
-        lastCall_ms = Date.now();
         const at10msFor100times = at10msCounter >= 100;
         if (at10msFor100times)
             at10msCounter = 100;

@@ -66,10 +66,7 @@ module.exports = function (RED: NodeRedApp) {
 
         if (config.isToEmitAllChanges) {
             eventEmitter.on(CHANGES_TOPIC, handleAnyTagChange);
-
-            if (config.emitOnStart)
-                RED.events.on("flows:started", handleOnStart)
-
+            setEmitterOnStart();
             return;
         }
 
@@ -89,17 +86,21 @@ module.exports = function (RED: NodeRedApp) {
             eventEmitter.on(tag, handleTagChanges);
         }
 
-        if (config.emitOnStart)
-            RED.events.on("flows:started", handleOnStart)
+
+        setEmitterOnStart();
 
         node.on("close", () => {
-            RED.events.removeListener("flows:started", handleOnStart);
+            RED.events.removeListener("flows:started", emitOnStart);
             tagNames.forEach(tag => eventEmitter.removeListener(tag, handleTagChanges));
             eventEmitter.removeListener(CHANGES_TOPIC, handleAnyTagChange)
         })
 
 
-        function handleOnStart() {
+        function setEmitterOnStart() {
+            if (config.emitOnStart) RED.events.on("flows:started", emitOnStart)
+        }
+
+        function emitOnStart() {
             if (config.isToEmitAllChanges) {
                 const currentTags: ITagStorage = node.context().global.get(ALL_TAGS_STORAGE) || {};
 
@@ -109,6 +110,8 @@ module.exports = function (RED: NodeRedApp) {
             } else {
                 tagNames.forEach(tag => handleTagChanges(tag, currentTags[tag]));
             }
+
+            RED.events.removeListener("flows:started", emitOnStart);
         }
 
         function handleTagChanges(changedTag: string, tagChange?: IStorageTag) {
@@ -161,12 +164,8 @@ module.exports = function (RED: NodeRedApp) {
 
         node.on("input", (msg: any) => {
 
-            if (!msg.topic || typeof msg.topic !== "string") {
-                node.error("Invalid Topic: " + JSON.stringify(msg.topic));
-                return;
-            }
-
             const isTooOften = checkIfTooOften();
+            lastCall_ms = Date.now();
             if (isTooOften) {
                 node.error("Emit cancelled, the node called TOO often!");
                 return;
@@ -186,6 +185,12 @@ module.exports = function (RED: NodeRedApp) {
                     buildChange(tagName, newValue, currentTags, change, true)
                 }
             } else {
+
+                if (!msg.topic || typeof msg.topic !== "string") {
+                    node.error("Invalid Tag Name: " + JSON.stringify(msg.topic));
+                    return;
+                }
+
                 if (msg.payload == null) return;
 
                 const tagName = config.tagName || msg.topic;
@@ -193,6 +198,7 @@ module.exports = function (RED: NodeRedApp) {
                 buildChange(tagName, newValue, currentTags, change, false)
             }
 
+            node.send(msg);
 
             if (!Object.keys(change).length) return;
 
@@ -238,8 +244,6 @@ module.exports = function (RED: NodeRedApp) {
             at10msCounter = 0;
             return false;
         }
-
-        lastCall_ms = Date.now();
 
         const at10msFor100times = at10msCounter >= 100;
         // clamp counter if the function is kept called;

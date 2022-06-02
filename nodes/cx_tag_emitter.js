@@ -118,6 +118,17 @@ module.exports = function (RED) {
             }
             const currentTags = node.context().global.get(ALL_TAGS_STORAGE) || {};
             const change = {};
+            if (msg.deleteTag) {
+                const tag = currentTags[msg.topic];
+                if (tag) {
+                    delete currentTags[msg.topic];
+                    node.warn(`Tag with name '${msg.topic}' DELETED`);
+                }
+                else {
+                    node.warn(`Tag with name '${msg.topic}' NOT FOUND`);
+                }
+                return;
+            }
             if (config.isBatch || msg.topic === "__batch") {
                 const newKeys = Object.keys(msg.payload);
                 if (!newKeys)
@@ -129,13 +140,13 @@ module.exports = function (RED) {
                 }
             }
             else {
-                if (!msg.topic || typeof msg.topic !== "string") {
-                    node.error("Invalid Tag Name: " + JSON.stringify(msg.topic));
+                const tagName = config.tagName || msg.topic;
+                if (!tagName || typeof tagName !== "string") {
+                    node.error("Invalid Tag Name: " + JSON.stringify(tagName));
                     return;
                 }
                 if (msg.payload == null)
                     return;
-                const tagName = config.tagName || msg.topic;
                 const newValue = msg.payload;
                 buildChange(tagName, newValue, currentTags, change, false);
             }

@@ -35,12 +35,33 @@ module.exports = function (RED) {
         }
         res.json(tagList).end();
     }));
+    RED.httpAdmin.post("/__cx_tag_emitter/emit_request/:id", (req, res) => {
+        const node = RED.nodes.getNode(req.params.id);
+        if (node != null) {
+            try {
+                node.receive();
+                res.sendStatus(200);
+            }
+            catch (err) {
+                res.sendStatus(500);
+                node.error("Failed to Emit on button");
+            }
+        }
+        else {
+            res.sendStatus(404);
+        }
+    });
     function ValueEmitter(config) {
         RED.nodes.createNode(this, config);
         const node = this;
         if (config.isToEmitAllChanges) {
             eventEmitter.on(CHANGES_TOPIC, handleAnyTagChange);
-            setEmitterOnStart();
+            if (config.emitOnStart)
+                RED.events.on("flows:started", emitOnStart);
+            node.on("input", emitCurrentTags);
+            node.on("close", () => {
+                eventEmitter.removeListener(CHANGES_TOPIC, handleAnyTagChange);
+            });
             return;
         }
         if (!config.tagName || typeof config.tagName !== "string") {
@@ -55,17 +76,17 @@ module.exports = function (RED) {
         for (const tag of tagNames) {
             eventEmitter.on(tag, handleTagChanges);
         }
-        setEmitterOnStart();
+        if (config.emitOnStart)
+            RED.events.on("flows:started", emitOnStart);
+        node.on("input", emitCurrentTags);
         node.on("close", () => {
-            RED.events.removeListener("flows:started", emitOnStart);
             tagNames.forEach(tag => eventEmitter.removeListener(tag, handleTagChanges));
-            eventEmitter.removeListener(CHANGES_TOPIC, handleAnyTagChange);
         });
-        function setEmitterOnStart() {
-            if (config.emitOnStart)
-                RED.events.on("flows:started", emitOnStart);
-        }
         function emitOnStart() {
+            emitCurrentTags();
+            RED.events.removeListener("flows:started", emitOnStart);
+        }
+        function emitCurrentTags() {
             if (config.isToEmitAllChanges) {
                 const currentTags = node.context().global.get(ALL_TAGS_STORAGE) || {};
                 if (Object.keys(currentTags).length)
@@ -74,7 +95,6 @@ module.exports = function (RED) {
             else {
                 tagNames.forEach(tag => handleTagChanges(tag, currentTags[tag]));
             }
-            RED.events.removeListener("flows:started", emitOnStart);
         }
         function handleTagChanges(changedTag, tagChange) {
             if (!tagChange)

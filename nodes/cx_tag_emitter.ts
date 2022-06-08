@@ -62,6 +62,24 @@ module.exports = function (RED: NodeRedApp) {
     });
 
 
+    RED.httpAdmin.post("/__cx_tag_emitter/emit_request/:id", (req,res) => {
+        // @ts-ignore
+        const node = RED.nodes.getNode(req.params.id);
+        if (node != null) {
+            try {
+                node.receive();
+                res.sendStatus(200);
+            } catch(err) {
+                res.sendStatus(500);
+                node.error("Failed to Emit on button");
+            }
+        } else {
+            res.sendStatus(404);
+        }
+    });
+
+
+
 
 
     function ValueEmitter(config: IValueEmitterConfig) {
@@ -70,17 +88,30 @@ module.exports = function (RED: NodeRedApp) {
         const node = this;
 
         if (config.isToEmitAllChanges) {
+            //
+            // ============= This is if ALL tag changes emitted ==============
+            //
             eventEmitter.on(CHANGES_TOPIC, handleAnyTagChange);
-            setEmitterOnStart();
+            if (config.emitOnStart)
+                RED.events.on("flows:started", emitOnStart)
+
+            node.on("input", emitCurrentTags);
+            node.on("close", () => {
+                eventEmitter.removeListener(CHANGES_TOPIC, handleAnyTagChange)
+            })
+
             return;
         }
 
+        //
+        // ============= This is if SOME or ONE tag changes emitted ==============
+        //
         if (!config.tagName || typeof config.tagName !== "string") {
             node.error("Tag Name is not provided");
             return;
         }
 
-
+        // split by comma, trim and remove empty results
         const tagNames = config.tagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
         if (!tagNames.length) return;
 
@@ -92,20 +123,23 @@ module.exports = function (RED: NodeRedApp) {
         }
 
 
-        setEmitterOnStart();
+        if (config.emitOnStart)
+            RED.events.on("flows:started", emitOnStart);
 
+        node.on("input", emitCurrentTags);
         node.on("close", () => {
-            RED.events.removeListener("flows:started", emitOnStart);
             tagNames.forEach(tag => eventEmitter.removeListener(tag, handleTagChanges));
-            eventEmitter.removeListener(CHANGES_TOPIC, handleAnyTagChange)
         })
 
 
-        function setEmitterOnStart() {
-            if (config.emitOnStart) RED.events.on("flows:started", emitOnStart)
-        }
 
         function emitOnStart() {
+            emitCurrentTags();
+
+            RED.events.removeListener("flows:started", emitOnStart);
+        }
+
+        function emitCurrentTags() {
             if (config.isToEmitAllChanges) {
                 const currentTags: ITagStorage = node.context().global.get(ALL_TAGS_STORAGE) || {};
 
@@ -115,8 +149,6 @@ module.exports = function (RED: NodeRedApp) {
             } else {
                 tagNames.forEach(tag => handleTagChanges(tag, currentTags[tag]));
             }
-
-            RED.events.removeListener("flows:started", emitOnStart);
         }
 
         function handleTagChanges(changedTag: string, tagChange?: IStorageTag) {

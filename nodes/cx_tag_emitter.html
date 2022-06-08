@@ -132,6 +132,36 @@ topic: string // tag name
           (this.tagName.includes(",") ? "Emits: some" : "Emits:" + this.tagName)
       );
     },
+    button: {
+      enabled: function() {
+        return !this.changed
+      },
+      onclick: function () {
+        if (this.changed) {
+          return RED.notify("Deploy before using button", "warning");
+        }
+
+        const customMsg = {
+          nodeId: this.id
+        }
+
+        $.ajax({
+          url: "__cx_tag_emitter/emit_request/" + this.id,
+          type: "POST",
+          data: JSON.stringify(customMsg),
+          contentType: "application/json; charset=utf-8",
+          success: () => {
+            const tagsEmitted = this.isToEmitAllChanges ?
+                    "all" : this.tagName;
+
+            RED.notify("Emitted: " + tagsEmitted, { type: "success", id: "inject", timeout: 2000 });
+          },
+          error: function (jqXHR) {
+            RED.notify("Error " + jqXHR.status, "error");
+          }
+        });
+      }
+    },
     oneditprepare: function () {
 
       const sectionEl = $('#node-input-section1');

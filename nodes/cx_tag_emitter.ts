@@ -53,7 +53,11 @@ module.exports = function (RED: NodeRedApp) {
         });
         if (!node) return;
         const currentTags: ITagStorage = node.context().global.get(ALL_TAGS_STORAGE) as ITagStorage || {};
-        const tagList = Object.keys(currentTags);
+        const tagList: string[] = [];
+        for (const tag in currentTags) {
+            tagList.push(tag + (currentTags[tag].desc ? (" - " + currentTags[tag].desc) : ""))
+        }
+
         res.json(tagList).end();
     });
 
@@ -189,15 +193,25 @@ module.exports = function (RED: NodeRedApp) {
             }
 
             if (config.isBatch || msg.topic === "__batch") {
-                const newKeys = Object.keys(msg.payload);
-                if (!newKeys) return;
+
+                // this is then BATCH Tag IN
+
+                const newKeys = Object.keys(msg.payload || {});
+                const newDescriptions = Object.keys(msg.desc || {});
+                if (!newKeys.length && !newDescriptions.length) return;
 
                 for (const key of newKeys) {
                     const tagName = key;
                     const newValue = msg.payload[key];
-                    buildChange(tagName, newValue, currentTags, change, true)
+                    buildChange(tagName, newValue, currentTags, change)
+                }
+
+                for (const tagName of newDescriptions) {
+                    currentTags[tagName].desc = msg.desc[tagName].toString();
                 }
             } else {
+
+                // this is then SINGLE Tag IN
 
                 const tagName = config.tagName || msg.topic;
                 if (!tagName || typeof tagName !== "string") {
@@ -208,7 +222,13 @@ module.exports = function (RED: NodeRedApp) {
                 if (msg.payload == null) return;
 
                 const newValue = msg.payload;
-                buildChange(tagName, newValue, currentTags, change, false)
+                buildChange(tagName, newValue, currentTags, change);
+
+                // override config description with the incoming message .desc property
+                if (typeof msg.desc === "string")
+                    currentTags[tagName].desc = msg.desc;
+                else if (config.desc)
+                    currentTags[tagName].desc = config.desc;
             }
 
             node.send(msg);
@@ -224,27 +244,46 @@ module.exports = function (RED: NodeRedApp) {
 
 
 
-        function buildChange(tagName: string, newValue: any, tagStorage: ITagStorage, change: ITagStorage, isBatch: boolean) {
-            const currentValue = tagStorage[tagName] ? tagStorage[tagName].value : undefined;
+        function buildChange(tagName: string, newValue: any, tagStorage: ITagStorage, change: ITagStorage) {
+            // OLD WAY, keep this for testing
+            // const currentValue = tagStorage[tagName] ? tagStorage[tagName].value : undefined;
+            //
+            // if (currentValue == null || isDifferent(newValue, currentValue)) {
+            //
+            //     if (currentValue && tagStorage[tagName].sourceNodeId !== node.id) {
+            //         node.warn(`Tag ${tagName} changed by two different sources. ` +
+            //             `From ${tagStorage[tagName].sourceNodeId} to ${node.id}`);
+            //     }
+            //
+            //     change[tagName] = {
+            //         tagName,
+            //         sourceNodeId: node.id,
+            //         value: newValue
+            //     }
+            //     tagStorage[tagName] = change[tagName];
+            // }
 
-            if (currentValue == null || isDifferent(newValue, currentValue)) {
+            if (!tagStorage[tagName]) {
+                tagStorage[tagName] = {
+                    tagName,
+                    sourceNodeId: node.id,
+                    value: 0
+                };
+            }
 
-                if (currentValue && tagStorage[tagName].sourceNodeId !== node.id) {
+            const currentValue = tagStorage[tagName].value;
+
+            if (isDifferent(newValue, currentValue)) {
+
+                if (tagStorage[tagName].sourceNodeId !== node.id) {
                     node.warn(`Tag ${tagName} changed by two different sources. ` +
                         `From ${tagStorage[tagName].sourceNodeId} to ${node.id}`);
                 }
 
-                change[tagName] = {
-                    tagName,
-                    sourceNodeId: node.id,
-                    value: newValue
-                }
-                tagStorage[tagName] = change[tagName];
+                tagStorage[tagName].value = newValue;
+                tagStorage[tagName].sourceNodeId = node.id;
 
-                if (!isBatch) {
-                    tagStorage[tagName].dType = config.dType;
-                    tagStorage[tagName].desc = config.desc;
-                }
+                change[tagName] = tagStorage[tagName];
             }
         }
     }

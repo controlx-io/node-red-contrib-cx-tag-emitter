@@ -29,7 +29,10 @@ module.exports = function (RED) {
         if (!node)
             return;
         const currentTags = node.context().global.get(ALL_TAGS_STORAGE) || {};
-        const tagList = Object.keys(currentTags);
+        const tagList = [];
+        for (const tag in currentTags) {
+            tagList.push(tag + (currentTags[tag].desc ? (" - " + currentTags[tag].desc) : ""));
+        }
         res.json(tagList).end();
     }));
     function ValueEmitter(config) {
@@ -130,13 +133,17 @@ module.exports = function (RED) {
                 return;
             }
             if (config.isBatch || msg.topic === "__batch") {
-                const newKeys = Object.keys(msg.payload);
-                if (!newKeys)
+                const newKeys = Object.keys(msg.payload || {});
+                const newDescriptions = Object.keys(msg.desc || {});
+                if (!newKeys.length && !newDescriptions.length)
                     return;
                 for (const key of newKeys) {
                     const tagName = key;
                     const newValue = msg.payload[key];
-                    buildChange(tagName, newValue, currentTags, change, true);
+                    buildChange(tagName, newValue, currentTags, change);
+                }
+                for (const tagName of newDescriptions) {
+                    currentTags[tagName].desc = msg.desc[tagName].toString();
                 }
             }
             else {
@@ -148,7 +155,11 @@ module.exports = function (RED) {
                 if (msg.payload == null)
                     return;
                 const newValue = msg.payload;
-                buildChange(tagName, newValue, currentTags, change, false);
+                buildChange(tagName, newValue, currentTags, change);
+                if (typeof msg.desc === "string")
+                    currentTags[tagName].desc = msg.desc;
+                else if (config.desc)
+                    currentTags[tagName].desc = config.desc;
             }
             node.send(msg);
             if (!Object.keys(change).length)
@@ -159,23 +170,23 @@ module.exports = function (RED) {
             }
             eventEmitter.emit(CHANGES_TOPIC, change);
         });
-        function buildChange(tagName, newValue, tagStorage, change, isBatch) {
-            const currentValue = tagStorage[tagName] ? tagStorage[tagName].value : undefined;
-            if (currentValue == null || isDifferent(newValue, currentValue)) {
-                if (currentValue && tagStorage[tagName].sourceNodeId !== node.id) {
+        function buildChange(tagName, newValue, tagStorage, change) {
+            if (!tagStorage[tagName]) {
+                tagStorage[tagName] = {
+                    tagName,
+                    sourceNodeId: node.id,
+                    value: 0
+                };
+            }
+            const currentValue = tagStorage[tagName].value;
+            if (isDifferent(newValue, currentValue)) {
+                if (tagStorage[tagName].sourceNodeId !== node.id) {
                     node.warn(`Tag ${tagName} changed by two different sources. ` +
                         `From ${tagStorage[tagName].sourceNodeId} to ${node.id}`);
                 }
-                change[tagName] = {
-                    tagName,
-                    sourceNodeId: node.id,
-                    value: newValue
-                };
-                tagStorage[tagName] = change[tagName];
-                if (!isBatch) {
-                    tagStorage[tagName].dType = config.dType;
-                    tagStorage[tagName].desc = config.desc;
-                }
+                tagStorage[tagName].value = newValue;
+                tagStorage[tagName].sourceNodeId = node.id;
+                change[tagName] = tagStorage[tagName];
             }
         }
     }

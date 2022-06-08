@@ -9,7 +9,7 @@
       isBatch: {value: false},
       tagName: {value: ""},
       desc: {value: ""},
-      dType: {value: "number"},
+      // dType: {value: "auto"},
     },
     inputs: 1,
     outputs: 1,
@@ -22,7 +22,7 @@
 
       const tagInGroupEl = $('#node-input-group-tag-in');
       const isBatchEl = $('#node-input-isBatch');
-      const dTypeEl = $("#node-input-dType");
+      // const dTypeEl = $("#node-input-dType");
 
       checkBatchStatus();
 
@@ -30,18 +30,19 @@
         checkBatchStatus();
       })
 
-      dTypeEl.typedInput({
-        types: [
-          {
-            value: "number",
-            options: [
-              { value: "number", label: "number"},
-              { value: "boolean", label: "boolean"},
-              { value: "string", label: "string"},
-            ]
-          }
-        ]
-      })
+      // dTypeEl.typedInput({
+      //   types: [
+      //     {
+      //       value: "auto",
+      //       options: [
+      //         { value: "auto", label: "auto detect"},
+      //         { value: "number", label: "number"},
+      //         { value: "boolean", label: "boolean"},
+      //         { value: "string", label: "string"},
+      //       ]
+      //     }
+      //   ]
+      // })
 
 
 
@@ -74,24 +75,30 @@
       <label for="node-input-desc">Description</label>
       <input type="text" id="node-input-desc" placeholder="System Healthy Status">
     </div>
-    <div class="form-row">
-      <label for="node-input-dType">Data type</label>
-      <input type="text" id="node-input-dType">
-    </div>
+<!--    <div class="form-row">-->
+<!--      <label for="node-input-dType">Data type</label>-->
+<!--      <input type="text" id="node-input-dType">-->
+<!--    </div>-->
   </div>
 </script>
 
 <script type="text/html" data-help-name="tags_in">
   <h3>Inputs</h3>
   <pre style="overflow-x: scroll; white-space: pre;">
+// if is batch
 payload: {
   tagName: number | boolean | string
+},
+desc: {
+  tagName: string
 }
   </pre>
   <p>OR</p>
   <pre style="overflow-x: scroll; white-space: pre;">
+// if a single tag
 payload: number | boolean | string
 topic?: string // tag name - optional if specified in Node Config
+desc?: string // description - optional if specified in Node Config
   </pre>
   <p>OR</p>
   <pre style="overflow-x: scroll; white-space: pre;">
@@ -121,8 +128,8 @@ topic: string // tag name
     label: function() {
       return this.name || (
         this.isToEmitAllChanges ?
-          "Emits:__batch_all" :
-          (this.tagName.includes(",") ? "Emits:__batch" : "Emits:" + this.tagName)
+          "Emits: all" :
+          (this.tagName.includes(",") ? "Emits: some" : "Emits:" + this.tagName)
       );
     },
     oneditprepare: function () {
@@ -130,7 +137,7 @@ topic: string // tag name
       const sectionEl = $('#node-input-section1');
       const isToEmitAllChangesEl = $('#node-input-isToEmitAllChanges');
 
-      checkBatchStatus();
+      // checkBatchStatus();
 
       isToEmitAllChangesEl.on("change", function() {
         checkBatchStatus();

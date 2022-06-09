@@ -39,6 +39,8 @@ module.exports = function (RED: NodeRedApp) {
 
     let lastCall_ms = 0;
     let at10msCounter = 0;
+    let emitOnStartCounter = 0;
+    let tagListenerCounter: {[tag: string]: number} = {}
 
     RED.httpAdmin.get('/__cx_tag_emitter/get_variables', async (req, res) => {
         // console.log(req.query);
@@ -88,6 +90,12 @@ module.exports = function (RED: NodeRedApp) {
         RED.nodes.createNode(this, config);
         const node = this;
 
+        // fixing MaxListenersExceededWarning
+        if (config.emitOnStart)
+            emitOnStartCounter++;
+        RED.events.setMaxListeners(emitOnStartCounter + 10);
+
+
         if (config.isToEmitAllChanges) {
             //
             // ============= This is if ALL tag changes emitted ==============
@@ -125,6 +133,11 @@ module.exports = function (RED: NodeRedApp) {
 
         for (const tag of tagNames) {
             eventEmitter.on(tag, handleTagChanges);
+            // fixing MaxListenersExceededWarning
+            if (!tagListenerCounter[tag]) tagListenerCounter[tag] = 0;
+            tagListenerCounter[tag]++;
+            const max = Math.max(...Object.values(tagListenerCounter));
+            eventEmitter.setMaxListeners(max + 10);
         }
 
 
@@ -133,7 +146,10 @@ module.exports = function (RED: NodeRedApp) {
 
         node.on("input", emitCurrentTags);
         node.on("close", () => {
-            tagNames.forEach(tag => eventEmitter.removeListener(tag, handleTagChanges));
+            tagNames.forEach(tag => {
+                eventEmitter.removeListener(tag, handleTagChanges);
+                tagListenerCounter[tag]--;
+            });
         })
 
 
@@ -142,6 +158,7 @@ module.exports = function (RED: NodeRedApp) {
             emitCurrentTags();
 
             RED.events.removeListener("flows:started", emitOnStart);
+            emitOnStartCounter--;
         }
 
         function emitCurrentTags() {

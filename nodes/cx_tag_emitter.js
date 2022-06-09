@@ -69,6 +69,8 @@ module.exports = function (RED) {
             return;
         }
         const tagNames = config.tagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
+        const addedTagNames = !config.addedTagName ? [] :
+            config.addedTagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
         if (!tagNames.length)
             return;
         const currentTags = node.context().global.get(ALL_TAGS_STORAGE) || {};
@@ -99,7 +101,7 @@ module.exports = function (RED) {
         function handleTagChanges(changedTag, tagChange) {
             if (!tagChange)
                 return;
-            if (tagNames.length === 1)
+            if (tagNames.length === 1 && !addedTagNames.length)
                 sendNodeMessage(changedTag, tagChange.value);
             else
                 sendTagValues();
@@ -107,10 +109,12 @@ module.exports = function (RED) {
                 if (batch)
                     return;
                 batch = {};
-                tagNames.forEach(tag => {
-                    if (currentTags[tag] && batch)
+                for (const tag of tagNames)
+                    if (currentTags[tag])
                         batch[tag] = currentTags[tag].value;
-                });
+                for (const tag of addedTagNames)
+                    if (currentTags[tag])
+                        batch[tag] = currentTags[tag].value;
                 setTimeout(() => {
                     sendNodeMessage("__batch", batch);
                     batch = undefined;

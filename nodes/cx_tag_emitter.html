@@ -119,6 +119,7 @@ topic: string // tag name
       name: {value: ""},
       isToEmitAllChanges: {value: false},
       tagName: {value: "", required: true},
+      addedTagName: {value: ""},
       emitOnStart: {value: true},
     },
     inputs: 0,
@@ -126,10 +127,11 @@ topic: string // tag name
     icon: "link-out.png",
     paletteLabel: "Emit tag",
     label: function() {
+      const add = this.addedTagName ? " +" : "";
       return this.name || (
         this.isToEmitAllChanges ?
           "Emits: all" :
-          (this.tagName.includes(",") ? "Emits: some" : "Emits:" + this.tagName)
+          ((this.tagName.includes(",") ? "Emits: some" : "Emits:" + this.tagName) + add)
       );
     },
     button: {
@@ -202,15 +204,17 @@ topic: string // tag name
     <input type="checkbox" id="node-input-emitOnStart" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
     <span>Emit On Start</span>
   </div>
-  <div id="node-input-section1">
-    <div class="form-row">
-      <label for="node-input-tagName">Tag name</label>
-      <input type="text" id="node-input-tagName" placeholder="SysOk_S">
-    </div>
-    <div class="form-row">
-      <label for="node-input-tagName">Tag List</label>
-      <code style="display: block; white-space: pre-wrap; height: 300px" id="node-input-tag-name-list"></code>
-    </div>
+  <div class="form-row">
+    <label for="node-input-tagName">Emitted Tag(s)</label>
+    <input type="text" id="node-input-tagName" placeholder="SysOk_S">
+  </div>
+  <div class="form-row">
+    <label for="node-input-addedTagName">Add Tag(s)</label>
+    <input type="text" id="node-input-addedTagName" placeholder="tags will be added, but not trigger on it's change">
+  </div>
+  <div class="form-row">
+    <label for="node-input-tagName">Tag List</label>
+    <code style="display: block; white-space: pre-wrap; height: 300px" id="node-input-tag-name-list"></code>
   </div>
 </script>
 

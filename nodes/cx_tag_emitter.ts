@@ -14,6 +14,7 @@ interface IMonitorTagsConfig extends ITagDefinition {
 }
 
 interface IValueEmitterConfig {
+    addedTagName: string;
     name: string,
     tagName: string | number,
     emitOnStart: boolean,
@@ -113,6 +114,10 @@ module.exports = function (RED: NodeRedApp) {
 
         // split by comma, trim and remove empty results
         const tagNames = config.tagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
+
+        const addedTagNames = !config.addedTagName ? [] :
+            config.addedTagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
+
         if (!tagNames.length) return;
 
         const currentTags: ITagStorage = node.context().global.get(ALL_TAGS_STORAGE) || {};
@@ -154,8 +159,10 @@ module.exports = function (RED: NodeRedApp) {
         function handleTagChanges(changedTag: string, tagChange?: IStorageTag) {
             if (!tagChange) return;
 
-            if (tagNames.length === 1) sendNodeMessage(changedTag, tagChange.value);
-            else sendTagValues();
+            if (tagNames.length === 1 && !addedTagNames.length)
+                sendNodeMessage(changedTag, tagChange.value);
+            else
+                sendTagValues();
 
 
             function sendTagValues() {
@@ -164,9 +171,11 @@ module.exports = function (RED: NodeRedApp) {
                 if (batch) return;
 
                 batch = {};
-                tagNames.forEach(tag => {
-                    if (currentTags[tag] && batch) batch[tag] = currentTags[tag].value
-                });
+                for (const tag of tagNames)
+                    if (currentTags[tag]) batch[tag] = currentTags[tag].value;
+
+                for (const tag of addedTagNames)
+                    if (currentTags[tag]) batch[tag] = currentTags[tag].value;
 
                 // run function sendNodeMessage in next JS loop
                 setTimeout(() => {

@@ -41,8 +41,20 @@ module.exports = function (RED: NodeRedApp) {
     let at10msCounter = 0;
     let tagListenerCounter: {[tag: string]: number} = {};
 
+    // let timeoutId: NodeJS.Timeout;
+    //
+    // function publishChanges() {
+    //     timeoutId = setInterval(() => {
+    //
+    //         // @ts-ignore
+    //         RED.comms.publish("tag_data", {lots: "of data: " + Date.now()});
+    //     }, 500);
+    // }
+
     RED.httpAdmin.get('/__cx_tag_emitter/get_variables', async (req, res) => {
-        // console.log(req.query);
+        // const nodeId = req.query.node_id;
+        // console.log(nodeId);
+
         let node: Node | undefined;
         // @ts-ignore
         RED.nodes.eachNode((innerNode: Node) => {
@@ -57,11 +69,23 @@ module.exports = function (RED: NodeRedApp) {
         const currentTags: ITagStorage = node.context().global.get(ALL_TAGS_STORAGE) as ITagStorage || {};
         const tagList: string[] = [];
         for (const tag in currentTags) {
-            tagList.push(tag + (currentTags[tag].desc ? (" - " + currentTags[tag].desc) : ""))
+            const {desc, value} = currentTags[tag];
+            const tagString = tag + "\t " + (
+                typeof currentTags[tag].value === "object" ? JSON.stringify(value) : value
+            ) + (desc ? ("\t\t" + desc) : "");
+
+            tagList.push(tagString);
         }
 
         res.json(tagList).end();
+
+        // publishChanges();
     });
+
+    // RED.httpAdmin.post('/__cx_tag_emitter/stop_publishing', () => {
+    //     console.log("STOP");
+    //     clearInterval(timeoutId);
+    // })
 
 
     RED.httpAdmin.post("/__cx_tag_emitter/emit_request/:id", (req,res) => {

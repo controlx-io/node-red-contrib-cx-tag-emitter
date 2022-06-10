@@ -168,25 +168,52 @@ topic: string // tag name
 
       const sectionEl = $('#node-input-section1');
       const isToEmitAllChangesEl = $('#node-input-isToEmitAllChanges');
+      const refreshValuesEl = $('#node-input-refreshValues');
 
-      // checkBatchStatus();
-
-      isToEmitAllChangesEl.on("change", function() {
-        checkBatchStatus();
+      isToEmitAllChangesEl.on("change", () => {
+        checkBatchStatus(this.id);
       })
 
-      function checkBatchStatus() {
+      refreshValuesEl.on("change", () => {
+        getVariableValues(this.id);
+      })
+
+      function checkBatchStatus(nodeId) {
         if (isToEmitAllChangesEl.is(':checked')) sectionEl.hide();
         else {
           sectionEl.show();
-          $.getJSON('__cx_tag_emitter/get_variables?config_id=' + this.id, function(data) {
-            if (!data) return;
-            $("#node-input-tag-name-list").text(data.join("\n"))
-          });
+          getVariableValues(nodeId);
         }
       }
+
+      function getVariableValues(nodeId) {
+        refreshValuesEl.prop("disabled", true);
+        $.getJSON('__cx_tag_emitter/get_variables?node_id=' + nodeId, function(data) {
+          refreshValuesEl.prop("disabled", false);
+          if (!data) return;
+          $("#node-input-tag-name-list").text(data.join("\n"))
+        });
+      }
+
+    // },
+    //
+    // oneditcancel: function () {
+    //   console.log(this.tagName);
+    //   sendpost()
+    // },
+    // oneditsave: function () {
+    //   sendpost()
+    // },
+    // oneditdelete: function () {
+    //   sendpost()
     }
   });
+  //
+  // function sendpost() {
+  //   $.post('__cx_tag_emitter/stop_publishing', function(data) {
+  //
+  //   });
+  // }
 </script>
 
 <script type="text/html" data-template-name="value_emitter">
@@ -215,7 +242,8 @@ topic: string // tag name
     </div>
     <div class="form-row">
       <label for="node-input-tagName">Tag List</label>
-      <code style="display: block; white-space: pre-wrap; height: 300px" id="node-input-tag-name-list"></code>
+      <input type="checkbox" id="node-input-refreshValues" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
+      <code style="display: block; white-space: pre; height: 300px" id="node-input-tag-name-list"></code>
     </div>
   </div>
 </script>

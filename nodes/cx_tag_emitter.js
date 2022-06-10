@@ -32,7 +32,9 @@ module.exports = function (RED) {
         const currentTags = node.context().global.get(ALL_TAGS_STORAGE) || {};
         const tagList = [];
         for (const tag in currentTags) {
-            tagList.push(tag + (currentTags[tag].desc ? (" - " + currentTags[tag].desc) : ""));
+            const { desc, value } = currentTags[tag];
+            const tagString = tag + "\t " + (typeof currentTags[tag].value === "object" ? JSON.stringify(value) : value) + (desc ? ("\t\t" + desc) : "");
+            tagList.push(tagString);
         }
         res.json(tagList).end();
     }));

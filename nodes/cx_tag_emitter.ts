@@ -39,8 +39,7 @@ module.exports = function (RED: NodeRedApp) {
 
     let lastCall_ms = 0;
     let at10msCounter = 0;
-    let emitOnStartCounter = 0;
-    let tagListenerCounter: {[tag: string]: number} = {}
+    let tagListenerCounter: {[tag: string]: number} = {};
 
     RED.httpAdmin.get('/__cx_tag_emitter/get_variables', async (req, res) => {
         // console.log(req.query);
@@ -91,9 +90,11 @@ module.exports = function (RED: NodeRedApp) {
         const node = this;
 
         // fixing MaxListenersExceededWarning
-        if (config.emitOnStart)
-            emitOnStartCounter++;
-        RED.events.setMaxListeners(emitOnStartCounter + 10);
+        // Looking after RED.events max listeners: adding max listeners number one by one
+        if (config.emitOnStart) {
+            const listenerCounts = RED.events.getMaxListeners() + 1;
+            RED.events.setMaxListeners(listenerCounts);
+        }
 
 
         if (config.isToEmitAllChanges) {
@@ -133,12 +134,14 @@ module.exports = function (RED: NodeRedApp) {
 
         for (const tag of tagNames) {
             eventEmitter.on(tag, handleTagChanges);
+
             // fixing MaxListenersExceededWarning
             if (!tagListenerCounter[tag]) tagListenerCounter[tag] = 0;
             tagListenerCounter[tag]++;
-            const max = Math.max(...Object.values(tagListenerCounter));
-            eventEmitter.setMaxListeners(max + 10);
         }
+
+        const max = Math.max(...Object.values(tagListenerCounter));
+        eventEmitter.setMaxListeners(max + 10);
 
 
         if (config.emitOnStart)
@@ -149,6 +152,9 @@ module.exports = function (RED: NodeRedApp) {
             tagNames.forEach(tag => {
                 eventEmitter.removeListener(tag, handleTagChanges);
                 tagListenerCounter[tag]--;
+
+                const listenerCount = eventEmitter.getMaxListeners();
+                eventEmitter.setMaxListeners(listenerCount - 1);
             });
         })
 
@@ -158,7 +164,10 @@ module.exports = function (RED: NodeRedApp) {
             emitCurrentTags();
 
             RED.events.removeListener("flows:started", emitOnStart);
-            emitOnStartCounter--;
+
+            // Looking after RED.events max listeners: subtracting max listeners number one by one
+            const listenerCounts = (RED.events.getMaxListeners() - 1) < 10 ? 10 : RED.events.getMaxListeners() - 1;
+            RED.events.setMaxListeners(listenerCounts);
         }
 
         function emitCurrentTags() {

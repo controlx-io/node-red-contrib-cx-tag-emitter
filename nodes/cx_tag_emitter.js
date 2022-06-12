@@ -83,7 +83,7 @@ module.exports = function (RED) {
         const currentTags = node.context().global.get(ALL_TAGS_STORAGE) || {};
         let batch;
         for (const tag of tagNames) {
-            eventEmitter.on(tag, handleTagChanges);
+            eventEmitter.on(tag, handleSomeTagChanges);
             if (!tagListenerCounter[tag])
                 tagListenerCounter[tag] = 0;
             tagListenerCounter[tag]++;
@@ -95,7 +95,7 @@ module.exports = function (RED) {
         node.on("input", emitCurrentTags);
         node.on("close", () => {
             tagNames.forEach(tag => {
-                eventEmitter.removeListener(tag, handleTagChanges);
+                eventEmitter.removeListener(tag, handleSomeTagChanges);
                 tagListenerCounter[tag]--;
                 const listenerCount = eventEmitter.getMaxListeners();
                 eventEmitter.setMaxListeners(listenerCount - 1);
@@ -114,17 +114,20 @@ module.exports = function (RED) {
                     handleAnyTagChange(currentTags);
             }
             else {
-                tagNames.forEach(tag => handleTagChanges(tag, currentTags[tag]));
+                tagNames.forEach(tag => handleSomeTagChanges(tag, currentTags[tag]));
             }
         }
-        function handleTagChanges(changedTag, tagChange) {
+        function handleSomeTagChanges(changedTag, tagChange) {
             if (!tagChange)
                 return;
             if (tagNames.length === 1 && !addedTagNames.length)
-                sendNodeMessage(changedTag, tagChange.value);
+                sendSingleTagValue(tagChange);
             else
-                sendTagValues();
-            function sendTagValues() {
+                sendSomeTagValues();
+            function sendSingleTagValue(tagChange) {
+                node.send({ topic: changedTag, payload: tagChange.value, prevValue: tagChange.prevValue });
+            }
+            function sendSomeTagValues() {
                 if (batch)
                     return;
                 batch = {};
@@ -135,12 +138,9 @@ module.exports = function (RED) {
                     if (currentTags[tag])
                         batch[tag] = currentTags[tag].value;
                 setTimeout(() => {
-                    sendNodeMessage("__batch", batch);
+                    node.send({ topic: "__batch", payload: batch });
                     batch = undefined;
                 }, 0);
-            }
-            function sendNodeMessage(topic, payload) {
-                node.send({ topic, payload });
             }
         }
         function handleAnyTagChange(changes) {
@@ -204,9 +204,21 @@ module.exports = function (RED) {
                 else if (config.desc)
                     currentTags[tagName].desc = config.desc;
             }
-            node.send(msg);
             if (!Object.keys(change).length)
                 return;
+            const newMsg = {};
+            if (config.isBatch || msg.topic === "__batch") {
+                newMsg.topic = msg.topic;
+                newMsg.payload = change;
+            }
+            else {
+                newMsg.topic = config.tagName || msg.topic;
+                if (newMsg.topic) {
+                    newMsg.payload = change[newMsg.topic].value;
+                    newMsg.prevValue = change[newMsg.topic].prevValue;
+                }
+            }
+            node.send(newMsg);
             node.context().global.set(ALL_TAGS_STORAGE, currentTags);
             for (const changedTag in change) {
                 eventEmitter.emit(changedTag, changedTag, change[changedTag]);
@@ -218,7 +230,8 @@ module.exports = function (RED) {
                 tagStorage[tagName] = {
                     tagName,
                     sourceNodeId: node.id,
-                    value: 0
+                    value: 0,
+                    prevValue: 0,
                 };
             }
             const currentValue = tagStorage[tagName].value;
@@ -228,6 +241,7 @@ module.exports = function (RED) {
                         `From ${tagStorage[tagName].sourceNodeId} to ${node.id}`);
                 }
                 tagStorage[tagName].value = newValue;
+                tagStorage[tagName].prevValue = currentValue;
                 tagStorage[tagName].sourceNodeId = node.id;
                 change[tagName] = tagStorage[tagName];
             }
@@ -249,24 +263,6 @@ module.exports = function (RED) {
     RED.nodes.registerType("value_emitter", ValueEmitter);
     RED.nodes.registerType("tags_in", TagsIn);
 };
-function modifyCurrentTags(nodeId, oldObject, newTagValueMap) {
-    const newKeys = Object.keys(newTagValueMap);
-    if (!newKeys)
-        return;
-    const changes = {};
-    for (const key of newKeys) {
-        if (!oldObject[key] || isDifferent(newTagValueMap[key], oldObject[key].value)) {
-            changes[key] = {
-                sourceNodeId: nodeId,
-                tagName: key,
-                value: newTagValueMap[key]
-            };
-        }
-    }
-    if (!Object.keys(changes))
-        return;
-    return changes;
-}
 function isDifferent(newValue, oldValue) {
     if (typeof newValue === "object" && JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
         return true;

@@ -1,4 +1,4 @@
-import {Node, NodeRedApp} from "node-red";
+import {Node, NodeMessage, NodeRedApp} from "node-red";
 import {EventEmitter} from "events";
 
 interface ITagDefinition {
@@ -24,6 +24,7 @@ interface IValueEmitterConfig {
 interface IStorageTag extends ITagDefinition {
     sourceNodeId: string,
     value: number | string | boolean | object,
+    prevValue: number | string | boolean | object,
 }
 
 interface ITagStorage {
@@ -40,16 +41,6 @@ module.exports = function (RED: NodeRedApp) {
     let lastCall_ms = 0;
     let at10msCounter = 0;
     let tagListenerCounter: {[tag: string]: number} = {};
-
-    // let timeoutId: NodeJS.Timeout;
-    //
-    // function publishChanges() {
-    //     timeoutId = setInterval(() => {
-    //
-    //         // @ts-ignore
-    //         RED.comms.publish("tag_data", {lots: "of data: " + Date.now()});
-    //     }, 500);
-    // }
 
     RED.httpAdmin.get('/__cx_tag_emitter/get_variables', async (req, res) => {
         // const nodeId = req.query.node_id;
@@ -79,14 +70,12 @@ module.exports = function (RED: NodeRedApp) {
 
         res.json(tagList).end();
 
-        // publishChanges();
     });
 
-    // RED.httpAdmin.post('/__cx_tag_emitter/stop_publishing', () => {
-    //     console.log("STOP");
-    //     clearInterval(timeoutId);
-    // })
 
+    // TODO attach tags.get() and tags.set() to RED object
+    // TODO add deadband
+    // TODO add tag manager table in Tag Emitter node
 
     RED.httpAdmin.post("/__cx_tag_emitter/emit_request/:id", (req,res) => {
         // @ts-ignore
@@ -157,7 +146,7 @@ module.exports = function (RED: NodeRedApp) {
         let batch: {[key: string]: any} | undefined;
 
         for (const tag of tagNames) {
-            eventEmitter.on(tag, handleTagChanges);
+            eventEmitter.on(tag, handleSomeTagChanges);
 
             // fixing MaxListenersExceededWarning
             if (!tagListenerCounter[tag]) tagListenerCounter[tag] = 0;
@@ -174,7 +163,7 @@ module.exports = function (RED: NodeRedApp) {
         node.on("input", emitCurrentTags);
         node.on("close", () => {
             tagNames.forEach(tag => {
-                eventEmitter.removeListener(tag, handleTagChanges);
+                eventEmitter.removeListener(tag, handleSomeTagChanges);
                 tagListenerCounter[tag]--;
 
                 const listenerCount = eventEmitter.getMaxListeners();
@@ -202,20 +191,24 @@ module.exports = function (RED: NodeRedApp) {
                     handleAnyTagChange(currentTags);
 
             } else {
-                tagNames.forEach(tag => handleTagChanges(tag, currentTags[tag]));
+                tagNames.forEach(tag => handleSomeTagChanges(tag, currentTags[tag]));
             }
         }
 
-        function handleTagChanges(changedTag: string, tagChange?: IStorageTag) {
+        function handleSomeTagChanges(changedTag: string, tagChange?: IStorageTag) {
             if (!tagChange) return;
 
             if (tagNames.length === 1 && !addedTagNames.length)
-                sendNodeMessage(changedTag, tagChange.value);
+                sendSingleTagValue(tagChange);
             else
-                sendTagValues();
+                sendSomeTagValues();
 
 
-            function sendTagValues() {
+            function sendSingleTagValue(tagChange: IStorageTag) {
+                node.send({ topic: changedTag, payload: tagChange.value, prevValue: tagChange.prevValue });
+            }
+
+            function sendSomeTagValues() {
 
                 // IF batch formed ignore this function
                 if (batch) return;
@@ -229,13 +222,10 @@ module.exports = function (RED: NodeRedApp) {
 
                 // run function sendNodeMessage in next JS loop
                 setTimeout(() => {
-                    sendNodeMessage("__batch", batch);
+                    // sendNodeMessage("__batch", batch);
+                    node.send({ topic: "__batch", payload: batch });
                     batch = undefined;
                 }, 0)
-            }
-
-            function sendNodeMessage(topic: string, payload: any) {
-                node.send({ topic, payload })
             }
         }
 
@@ -322,10 +312,25 @@ module.exports = function (RED: NodeRedApp) {
                     currentTags[tagName].desc = config.desc;
             }
 
-            node.send(msg);
-
             if (!Object.keys(change).length) return;
 
+            // send MSG as it would be emitted from a TagEmitter node
+            const newMsg: {[key: string]: any} = {};
+
+            if (config.isBatch || msg.topic === "__batch") {
+                newMsg.topic = msg.topic;
+                newMsg.payload = change;
+            } else {
+                newMsg.topic = config.tagName || msg.topic;
+                if (newMsg.topic) {
+                    newMsg.payload = change[newMsg.topic].value;
+                    newMsg.prevValue = change[newMsg.topic].prevValue;
+                }
+            }
+            node.send(newMsg);
+
+
+            // save the tag storage and emit changes
             node.context().global.set(ALL_TAGS_STORAGE, currentTags);
             for (const changedTag in change) {
                 eventEmitter.emit(changedTag, changedTag, change[changedTag]);
@@ -336,29 +341,12 @@ module.exports = function (RED: NodeRedApp) {
 
 
         function buildChange(tagName: string, newValue: any, tagStorage: ITagStorage, change: ITagStorage) {
-            // OLD WAY, keep this for testing
-            // const currentValue = tagStorage[tagName] ? tagStorage[tagName].value : undefined;
-            //
-            // if (currentValue == null || isDifferent(newValue, currentValue)) {
-            //
-            //     if (currentValue && tagStorage[tagName].sourceNodeId !== node.id) {
-            //         node.warn(`Tag ${tagName} changed by two different sources. ` +
-            //             `From ${tagStorage[tagName].sourceNodeId} to ${node.id}`);
-            //     }
-            //
-            //     change[tagName] = {
-            //         tagName,
-            //         sourceNodeId: node.id,
-            //         value: newValue
-            //     }
-            //     tagStorage[tagName] = change[tagName];
-            // }
-
             if (!tagStorage[tagName]) {
                 tagStorage[tagName] = {
                     tagName,
                     sourceNodeId: node.id,
-                    value: 0
+                    value: 0,
+                    prevValue: 0,
                 };
             }
 
@@ -372,6 +360,7 @@ module.exports = function (RED: NodeRedApp) {
                 }
 
                 tagStorage[tagName].value = newValue;
+                tagStorage[tagName].prevValue = currentValue;
                 tagStorage[tagName].sourceNodeId = node.id;
 
                 change[tagName] = tagStorage[tagName];
@@ -401,29 +390,6 @@ module.exports = function (RED: NodeRedApp) {
 }
 
 
-
-function modifyCurrentTags(nodeId: string, oldObject: ITagStorage, newTagValueMap: {[key: string]: any}):
-    ITagStorage | undefined
-{
-    const newKeys = Object.keys(newTagValueMap);
-    if (!newKeys) return;
-
-    const changes: ITagStorage = {};
-
-    for (const key of newKeys) {
-        if (!oldObject[key] || isDifferent(newTagValueMap[key], oldObject[key].value)) {
-            changes[key] = {
-                sourceNodeId: nodeId,
-                tagName: key,
-                value: newTagValueMap[key]
-            }
-        }
-    }
-
-    if (!Object.keys(changes)) return;
-
-    return changes
-}
 
 function isDifferent(newValue: any, oldValue: any): boolean {
     if (typeof newValue === "object" && JSON.stringify(oldValue) !== JSON.stringify(newValue)) {

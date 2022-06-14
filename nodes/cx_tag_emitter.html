@@ -1,66 +1,46 @@
-<!-- ############################### TAGS IN ################################# -->
 
-<script type="text/javascript">
-  RED.nodes.registerType("tags_in", {
-    category: "CX Tags",
-    color: "#4db6ac",
-    defaults: {
-      name: {value: ""},
-      isBatch: {value: false},
-      tagName: {value: ""},
-      desc: {value: ""},
-      deadband: {value: "", validate:RED.validators.number(true)},
-    },
-    inputs: 1,
-    outputs: 1,
-    icon: "link-out.png",
-    paletteLabel: "Tags In",
-    label: function() {
-      return this.name || ( this.isBatch ? "Batch In" : (this.tagName || "Tag In"));
-    },
-    oneditprepare: function() {
-
-      const tagInGroupEl = $('#node-input-group-tag-in');
-      const isBatchEl = $('#node-input-isBatch');
-      // const dTypeEl = $("#node-input-dType");
-
-      checkBatchStatus();
-
-      isBatchEl.on("change", function() {
-        checkBatchStatus();
-      })
-
-      // dTypeEl.typedInput({
-      //   types: [
-      //     {
-      //       value: "auto",
-      //       options: [
-      //         { value: "auto", label: "auto detect"},
-      //         { value: "number", label: "number"},
-      //         { value: "boolean", label: "boolean"},
-      //         { value: "string", label: "string"},
-      //       ]
-      //     }
-      //   ]
-      // })
-
-
-
-
-
-      function checkBatchStatus() {
-        if (isBatchEl.is(':checked')) tagInGroupEl.hide();
-        else tagInGroupEl.show();
-      }
-
-    }
-  });
+<!-- ############################### STORAGE MANAGER ################################# -->
+<script type="text/html" data-template-name="tag-storage">
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name" placeholder="Name">
+  </div>
+    <div class="form-row">
+      <label for="node-config-input-storeName"><i class="fa fa-database"></i> Context</label>
+      <select id="node-config-input-storeName"></select>
+    </div>
+    <div class="form-row">
+      <label id="node-config-label-namespaces" style="width: auto;">Namespaces:</label>
+    </div>
+    <div class="form-row node-config-input-path-container-row">
+      <ol id="node-config-input-path-container"></ol>
+    </div>
 </script>
+
+<script type="text/html" data-help-name="tag-storage">
+  <p>Functionality</p>
+  <ul>
+    <li>1. Set context storage to persist the tags</li>
+    <li>2. Add Namespaces (tag paths)</li>
+  </ul>
+</script>
+
+
+
+<!-- ############################### TAGS IN ################################# -->
 
 <script type="text/html" data-template-name="tags_in">
   <div class="form-row">
     <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
     <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-storage"><i class="fa fa-database"></i> Storage</label>
+    <input type="text" id="node-input-storage">
+  </div>
+  <div class="form-row">
+    <label for="node-input-path"><i class="fa  fa-sitemap"></i> New path </label>
+    <input type="text" id="node-input-path" placeholder="area1/machine1">
   </div>
   <div class="form-row">
     <label for="node-input-isBatch">Tags Batch</label>
@@ -76,16 +56,12 @@
       <input type="text" id="node-input-desc" placeholder="System Healthy Status">
     </div>
 <!--    <div class="form-row">-->
-<!--      <label for="node-input-dType">Data type</label>-->
-<!--      <input type="text" id="node-input-dType">-->
+<!--      <label for="node-input-deadband">Deadband</label>-->
+<!--      <input type="text" id="node-input-deadband" placeholder="The change out of this window will be emitted">-->
 <!--    </div>-->
-    <div class="form-row">
-      <label for="node-input-deadband">Deadband (+/-)</label>
-      <input type="text" id="node-input-deadband" placeholder="A number for '+' and '-' direction">
-    </div>
     <div class="form-tips">
       <span>Deadband will be applied to the "number" tag type ONLY.</span>
-      <span>The tag type is recognised automatically.</span>
+      <span>The tag data type is recognised automatically.</span>
     </div>
   </div>
 </script>
@@ -119,115 +95,18 @@ topic: string // tag name
 
 <!-- ############################### VALUE EMITTER ################################# -->
 
-<script type="text/javascript">
-  RED.nodes.registerType("value_emitter", {
-    category: "CX Tags",
-    color: "#4db6ac",
-    defaults: {
-      name: {value: ""},
-      isToEmitAllChanges: {value: false},
-      tagName: {value: "", required: true},
-      addedTagName: {value: ""},
-      emitOnStart: {value: true},
-    },
-    inputs: 0,
-    outputs: 1,
-    icon: "link-out.png",
-    paletteLabel: "Emit tag",
-    label: function() {
-      const add = this.addedTagName ? " +" : "";
-      return this.name || (
-        this.isToEmitAllChanges ?
-          "Emits: all" :
-          ((this.tagName.includes(",") ? "Emits: some" : "Emits:" + this.tagName) + add)
-      );
-    },
-    button: {
-      enabled: function() {
-        return !this.changed
-      },
-      onclick: function () {
-        if (this.changed) {
-          return RED.notify("Deploy before using button", "warning");
-        }
-
-        const customMsg = {
-          nodeId: this.id
-        }
-
-        $.ajax({
-          url: "__cx_tag_emitter/emit_request/" + this.id,
-          type: "POST",
-          data: JSON.stringify(customMsg),
-          contentType: "application/json; charset=utf-8",
-          success: () => {
-            const tagsEmitted = this.isToEmitAllChanges ?
-                    "all" : this.tagName;
-
-            RED.notify("Emitted: " + tagsEmitted, { type: "success", id: "inject", timeout: 2000 });
-          },
-          error: function (jqXHR) {
-            RED.notify("Error " + jqXHR.status, "error");
-          }
-        });
-      }
-    },
-    oneditprepare: function () {
-
-      const sectionEl = $('#node-input-section1');
-      const isToEmitAllChangesEl = $('#node-input-isToEmitAllChanges');
-      const refreshValuesEl = $('#node-input-refreshValues');
-
-      isToEmitAllChangesEl.on("change", () => {
-        checkBatchStatus(this.id);
-      })
-
-      refreshValuesEl.on("change", () => {
-        getVariableValues(this.id);
-      })
-
-      function checkBatchStatus(nodeId) {
-        if (isToEmitAllChangesEl.is(':checked')) sectionEl.hide();
-        else {
-          sectionEl.show();
-          getVariableValues(nodeId);
-        }
-      }
-
-      function getVariableValues(nodeId) {
-        refreshValuesEl.prop("disabled", true);
-        $.getJSON('__cx_tag_emitter/get_variables?node_id=' + nodeId, function(data) {
-          refreshValuesEl.prop("disabled", false);
-          if (!data) return;
-          $("#node-input-tag-name-list").text(data.join("\n"))
-        });
-      }
-
-    // },
-    //
-    // oneditcancel: function () {
-    //   console.log(this.tagName);
-    //   sendpost()
-    // },
-    // oneditsave: function () {
-    //   sendpost()
-    // },
-    // oneditdelete: function () {
-    //   sendpost()
-    }
-  });
-  //
-  // function sendpost() {
-  //   $.post('__cx_tag_emitter/stop_publishing', function(data) {
-  //
-  //   });
-  // }
-</script>
-
 <script type="text/html" data-template-name="value_emitter">
   <div class="form-row">
     <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
     <input type="text" id="node-input-name" placeholder="Name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-storage"><i class="fa fa-database"></i> Storage</label>
+    <input type="text" id="node-input-storage">
+  </div>
+  <div class="form-row">
+    <label for="node-input-path"><i class="fa fa-sitemap"></i> Path</label>
+    <select id="node-input-path" style="width: 70%"></select>
   </div>
   <div class="form-row">
     <label for="node-input-isToEmitAllChanges"></label>
@@ -249,8 +128,11 @@ topic: string // tag name
       <input type="text" id="node-input-addedTagName" placeholder="tags will be added, but not trigger on it's change">
     </div>
     <div class="form-row">
-      <label for="node-input-tagName">Tag List</label>
+      <label for="node-input-refreshValues">Refresh Tags</label>
       <input type="checkbox" id="node-input-refreshValues" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
+      <label id="node-input-refreshValuesLabel"></label>
+    </div>
+    <div class="form-row">
       <code style="display: block; white-space: pre; height: 300px" id="node-input-tag-name-list"></code>
     </div>
   </div>
@@ -284,5 +166,385 @@ topic: string // tag name
     }
 }
   </pre>
+</script>
 
+
+
+<!-- ========================= SCRIPTS ================================ -->
+
+<script type="text/javascript">
+  (function() {
+
+
+    async function getPaths(configNodeId, storageName, stats) {
+      return new Promise((accept) => {
+        storageName = storageName || "";
+        stats = !!stats;
+        const url = `__cx_tag_emitter/get_paths?config_node_id=${configNodeId}&` +
+                `storage_name=${storageName}&stats=${stats}`;
+        $.getJSON(url, (data) => {
+          if (!Array.isArray(data)) return accept([]);
+          accept(data);
+        });
+      })
+    }
+
+    function sanitisePathName(pathName) {
+      if (typeof pathName !== "string") pathName.toString();
+      pathName = pathName.trim();
+      if (pathName.startsWith("/")) pathName = pathName.slice(1);
+      if (pathName.endsWith("/")) pathName = pathName.slice(0, -1);
+      pathName = pathName.replace(/[^0-9a-zA-Z.://]/g, "_");
+      return pathName
+    }
+
+
+    /**
+     *  ============================================================================
+     *  =============================== TAG STORAGE ================================
+     */
+
+    RED.nodes.registerType("tag-storage", {
+      category: 'config',
+      defaults: {
+        name: {value: ""},
+        storeName: {value: "default"},
+      },
+      label: function() {
+        if (this.name)
+          return this.name;
+        return "context:" + this.storeName;
+      },
+
+      oneditresize: function(size) {
+        // below is a copy from the Node-RED "switch" node to fill the container
+        const rows = $("#node-config-dialog-edit-form>div:not(.node-config-input-path-container-row)");
+        let height = size.height;
+        for (let i=0; i<rows.length; i++) {
+          height -= $(rows[i]).outerHeight(true);
+        }
+        const editorRow = $("#node-config-dialog-edit-form>div.node-config-input-path-container-row");
+        height -= (parseInt(editorRow.css("marginTop"))+parseInt(editorRow.css("marginBottom")));
+        // height += 16;
+        $("#node-config-input-path-container").editableList('height',height);
+      },
+
+      oneditprepare: function () {
+        const self = this;
+
+        const pathContainerEl = $("#node-config-input-path-container");
+        const namespacesLabelEl = $("#node-config-label-namespaces");
+
+        const storeNameEl = $('#node-config-input-storeName');
+        storeNameEl.on("change", async () => {
+          pathContainerEl.editableList('empty');
+          await listItems(storeNameEl.val());
+        });
+
+        const addItemButtonEl = $(".red-ui-editableList-addButton");
+        addItemButtonEl.prop("disabled", true);
+
+        $.getJSON('__cx_tag_emitter/get_storages', async (data) => {
+          if (!Array.isArray(data)) return;
+          data.forEach(opt => storeNameEl.append($("<option>", {value:opt, text:opt})));
+          storeNameEl.val(this.storeName);
+          await listItems(storeNameEl.val());
+          addItemButtonEl.prop("disabled", false);
+        });
+
+        pathContainerEl.css('min-height','150px').css('min-width','450px').editableList({
+          addItem: (row, index, data) => {
+
+            const pathTextEl = $('<input type="text" placeholder="area1/machine1">')
+                    .css({width: "100%"})
+                    .appendTo(row);
+
+            pathTextEl.val(data.path);
+            pathTextEl.prop('disabled', true);
+          },
+          addButton: false,
+        });
+
+        async function listItems(storeName) {
+          if (!storeName) return;
+
+          const pathsAndStats = await getPaths(self.id, storeName, true);
+          let totalTags = 0;
+          for (const pathsAndStat of pathsAndStats) {
+            const [path, stat] = pathsAndStat;
+            pathContainerEl.editableList('addItem', {path: path + ` [${stat.tagQty} tags]`});
+            totalTags += stat.tagQty;
+          }
+
+          namespacesLabelEl.html(`Namespaces (total tags: ${totalTags}):`);
+        }
+      },
+    });
+
+
+    /**
+     *  ============================================================================
+     *  ================================= TAGS IN ==================================
+     */
+
+    RED.nodes.registerType("tags_in", {
+      category: "CX Tags",
+      color: "#4db6ac",
+      defaults: {
+        storage: {
+          value: "",
+          type: "tag-storage",
+          required: true
+        },
+        path: {value: "[root]", required: true},
+        name: {value: ""},
+        isBatch: {value: false},
+        tagName: {value: "", required: true},
+        desc: {value: ""},
+        deadband: {value: "", validate:RED.validators.number(true)},
+      },
+      inputs: 1,
+      outputs: 1,
+      icon: "link-out.png",
+      paletteLabel: "Tags In",
+      label: function() {
+        return this.name || ( this.isBatch ? "Batch In" : (this.tagName || "Tag In"));
+      },
+      oneditprepare: function() {
+
+        let currentStorageSelection = "";
+        let paths = ["[root]"];
+        const tagInGroupEl = $('#node-input-group-tag-in');
+        const isBatchEl = $('#node-input-isBatch');
+        const tagNameEl = $('#node-input-tagName');
+        const pathEl = $('#node-input-path');
+
+        // this called when the config panel opens
+        isBatchEl.on("change", checkBatchStatus);
+
+        pathEl.on("change", () => {
+          if (pathEl.val() === "[root]") return;
+
+          pathEl.val(sanitisePathName(pathEl.val()));
+        })
+
+
+        pathEl.autoComplete({
+          search: function(val) {
+            const matches = [];
+            paths.forEach(v => {
+              let i = v.toLowerCase().indexOf(val.toLowerCase());
+              if (i > -1) {
+                matches.push({
+                  value: v,
+                  label: v,
+                  i: i
+                })
+              }
+            });
+            matches.sort(function(A,B){return A.i-B.i})
+            return matches
+          }
+        })
+
+        const storageEl = $("#node-input-storage");
+        storageEl.on("change", async () => {
+          const storageNodeId = storageEl.val();
+          if (currentStorageSelection === storageNodeId) return;
+          currentStorageSelection = storageNodeId;
+
+          // add options to the PATH select
+          const storageConfigNode = RED.nodes.node(storageNodeId);
+          if (!storageConfigNode) return;
+
+          paths = await getPaths(storageNodeId);
+
+        });
+
+        function checkBatchStatus() {
+          if (isBatchEl.is(':checked')) {
+            tagInGroupEl.hide();
+            if (!tagNameEl.val()) tagNameEl.val("__isBatch");
+          }
+          else {
+            tagInGroupEl.show();
+            if (tagNameEl.val() === "__isBatch") tagNameEl.val("");
+          }
+        }
+
+      }
+    });
+
+
+
+
+    /**
+     *  ============================================================================
+     *  ============================== VALUE EMITTER ===============================
+     */
+
+    RED.nodes.registerType("value_emitter", {
+      category: "CX Tags",
+      color: "#4db6ac",
+      defaults: {
+        storage: {
+          value: "",
+          type: "tag-storage",
+          required: true
+        },
+        path: {value: "[root]", required: true},
+        name: {value: ""},
+        isToEmitAllChanges: {value: false},
+        tagName: {value: "", required: true},
+        addedTagName: {value: ""},
+        emitOnStart: {value: true},
+      },
+      inputs: 0,
+      outputs: 1,
+      icon: "link-out.png",
+      paletteLabel: "Emit tag",
+      label: function() {
+        const add = this.addedTagName ? " +" : "";
+        return this.name || (
+                this.isToEmitAllChanges ?
+                        "Emits: all" :
+                        ((this.tagName.includes(",") ? "Emits: some" : "Emits:" + this.tagName) + add)
+        );
+      },
+      button: {
+        enabled: function() {
+          return !this.changed
+        },
+        onclick: function () {
+          if (this.changed) {
+            return RED.notify("Deploy before using button", "warning");
+          }
+
+          const customMsg = {
+            nodeId: this.id
+          }
+
+          $.ajax({
+            url: "__cx_tag_emitter/emit_request/" + this.id,
+            type: "POST",
+            data: JSON.stringify(customMsg),
+            contentType: "application/json; charset=utf-8",
+            success: () => {
+              const tagsEmitted = this.isToEmitAllChanges ?
+                      "all" : this.tagName;
+
+              RED.notify("Emitted: " + tagsEmitted, { type: "success", id: "inject", timeout: 2000 });
+            },
+            error: function (jqXHR) {
+              RED.notify("Error " + jqXHR.status, "error");
+            }
+          });
+        }
+      },
+      oneditprepare: function () {
+        const sectionEl = $('#node-input-section1');
+        const isToEmitAllChangesEl = $('#node-input-isToEmitAllChanges');
+        const refreshValuesEl = $('#node-input-refreshValues');
+        const refreshValuesLabelEl = $('#node-input-refreshValuesLabel');
+        const pathSelectEl = $('#node-input-path');
+        const tagNameEl = $('#node-input-tagName');
+        const storageEl = $("#node-input-storage");
+
+        let currentStorageSelection = "";
+        let varNames = [];
+
+        isToEmitAllChangesEl.on("change", checkBatchStatus)
+        refreshValuesEl.on("change", getVariableValues)
+        pathSelectEl.on("change", getVariableValues);
+
+
+        function checkBatchStatus() {
+          if (isToEmitAllChangesEl.is(':checked'))
+            sectionEl.hide();
+          else {
+            sectionEl.show();
+            getVariableValues();
+          }
+        }
+
+        storageEl.on("change", async () => {
+          const storageNodeId = storageEl.val();
+          // this prevents from firing this function multiple times
+          if (currentStorageSelection === storageNodeId) return;
+          currentStorageSelection = storageNodeId;
+
+          // add options to the PATH select
+          const storageConfigNode = RED.nodes.node(storageNodeId);
+          if (!storageConfigNode) return;
+
+          const paths = await getPaths(storageNodeId);
+
+          for (const path of paths) {
+            pathSelectEl.append($("<option>", {value: path, text: path}));
+          }
+          if (paths.includes(this.path)) pathSelectEl.val(this.path);
+          else pathSelectEl.val("[root]");
+
+          getVariableValues();
+        });
+
+
+        tagNameEl.autoComplete({
+          search: function(val) {
+            const matches = [];
+            varNames.forEach(v => {
+              let i = v.toLowerCase().indexOf(val.toLowerCase());
+              if (i > -1) {
+                matches.push({
+                  value: v,
+                  label: v,
+                  i: i
+                })
+              }
+            });
+            matches.sort(function(A,B){return A.i-B.i})
+            return matches
+          }
+        })
+
+        function getVariableValues() {
+          const storageNodeId = storageEl.val();
+          const storageConfigNode = RED.nodes.node(storageNodeId);
+
+          const parentPath = pathSelectEl.val();
+          if (!storageConfigNode || !parentPath || isToEmitAllChangesEl.is(':checked')) return;
+
+          const varNameListEl = $("#node-input-tag-name-list");
+          refreshValuesLabelEl.text("Loading tags...");
+
+          refreshValuesEl.prop("disabled", true);
+          const url = `__cx_tag_emitter/get_variables?config_node_id=${storageNodeId}&parent_path=${parentPath}`
+          $.getJSON(url, function(data) {
+            refreshValuesEl.prop("disabled", false);
+            refreshValuesLabelEl.text("");
+
+            // tagNames: string[], values: {[tagName: string]: any}, descriptions: {[tagName: string]: string}
+            const [tagNames, values, descriptions] = data || [];
+            if (!tagNames || !tagNames.length)
+              return varNameListEl.text("No tags here :( Try another path.");
+
+            let out = "";
+            for (const tagName of tagNames) {
+              const value = values[tagName];
+              const desc = descriptions[tagName];
+
+              out += tagName + "\t " + (
+                      typeof value === "object" ? JSON.stringify(value) : value
+              ) + (desc ? ("\t\t" + desc) : "") + "\n";
+            }
+
+            varNameListEl.text(out);
+
+            varNames = tagNames;
+          });
+        }
+      }
+    });
+
+  })();
 </script>

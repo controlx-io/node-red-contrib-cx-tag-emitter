@@ -1,43 +1,64 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const events_1 = require("events");
-const ALL_TAGS_STORAGE = "__ALL_TAGS__";
+const TAGS_STORAGE = "_TAGS_";
+const ROOT_STORAGE_PATH = "[root]";
 class TagStorage {
-    static setGlobalStorage(global) {
-        if (TagStorage.globalContext)
+    constructor(node, storeName) {
+        this.storeName = storeName;
+        this.storage = {
+            [ROOT_STORAGE_PATH]: {}
+        };
+        const _storeName = this.storeName === "default" ? undefined : this.storeName;
+        const storage = node
+            .context()
+            .global
+            .get(TAGS_STORAGE, _storeName);
+        if (storage) {
+            this.storage = storage;
+        }
+        else {
+            node
+                .context()
+                .global
+                .set(TAGS_STORAGE, this.storage, _storeName);
+        }
+    }
+    get name() {
+        return this.storeName || "";
+    }
+    static getStoragesByGlobalContext(node, storageName) {
+        const _storeName = storageName === "default" ? undefined : storageName;
+        const storage = node
+            .context()
+            .global
+            .get(TAGS_STORAGE, _storeName);
+        return storage || {};
+    }
+    setStorage(path) {
+        if (!this.storage[path])
+            this.storage[path] = {};
+        return this.storage[path];
+    }
+    getStorage(path) {
+        path = path || ROOT_STORAGE_PATH;
+        return this.storage[path];
+    }
+    getTag(tagName, path) {
+        path = path || ROOT_STORAGE_PATH;
+        if (!this.storage[path])
             return;
-        TagStorage.globalContext = global;
-        TagStorage.globalContext.set(ALL_TAGS_STORAGE, TagStorage.storage);
+        return this.storage[path][tagName];
     }
-    static getStorage(path) {
-        if (path)
-            return TagStorage.storage[path];
-        return TagStorage.storage.root;
-    }
-    static getTag(tagName, path) {
-        if (path)
-            return TagStorage.storage[path][tagName];
-        return TagStorage.storage.root[tagName];
-    }
-    static setTag(tag, path) {
-        if (path)
-            TagStorage.storage[path][tag.name] = tag;
-        else
-            TagStorage.storage.root[tag.name] = tag;
+    setTag(tag, path) {
+        path = path || ROOT_STORAGE_PATH;
+        this.storage[path][tag.name] = tag;
         return tag;
     }
-    static getNameValueObject(tagIdList, path) {
+    getNameValueObject(tagIdList, path) {
+        path = path || ROOT_STORAGE_PATH;
         const out = {};
-        const storage = path ? TagStorage.storage[path] : TagStorage.storage.root;
+        const storage = this.storage[path];
         if (!storage)
             return out;
         for (const tagId of tagIdList) {
@@ -48,8 +69,9 @@ class TagStorage {
         }
         return out;
     }
-    static deleteTag(tagId, path) {
-        const storage = path ? TagStorage.storage[path] : TagStorage.storage.root;
+    deleteTag(tagId, path) {
+        path = path || ROOT_STORAGE_PATH;
+        const storage = this.storage[path];
         const tag = storage ? storage[tagId] : null;
         if (tag && storage) {
             delete storage[tagId];
@@ -57,9 +79,6 @@ class TagStorage {
         }
     }
 }
-TagStorage.storage = {
-    root: {}
-};
 class Tag {
     constructor(_name, sourceNodeId) {
         this._name = _name;
@@ -90,17 +109,64 @@ module.exports = function (RED) {
     let lastCall_ms = 0;
     let at10msCounter = 0;
     let tagListenerCounter = {};
-    RED.httpAdmin.get('/__cx_tag_emitter/get_variables', (req, res) => __awaiter(this, void 0, void 0, function* () {
-        const parentPath = "";
-        const currentTags = TagStorage.getStorage(parentPath);
-        const tagList = [];
-        for (const tag in currentTags) {
-            const { desc, value } = currentTags[tag];
-            const tagString = tag + "\t " + (typeof currentTags[tag].value === "object" ? JSON.stringify(value) : value) + (desc ? ("\t\t" + desc) : "");
-            tagList.push(tagString);
+    const redContextStorage = RED.settings.get("contextStorage");
+    const storages = redContextStorage ? Object.keys(redContextStorage) : [];
+    if (!storages.includes("default"))
+        storages.unshift("default");
+    RED.httpAdmin.get('/__cx_tag_emitter/get_storages', (req, res) => {
+        res.json(storages).end();
+    });
+    RED.httpAdmin.get("/__cx_tag_emitter/get_paths", (req, res) => {
+        const configNodeId = req.query["config_node_id"];
+        const storageName = req.query["storage_name"];
+        const isStats = req.query["stats"] === "true";
+        const configNode = RED.nodes.getNode(configNodeId);
+        if (!configNodeId || !configNode || !configNode.tagStorage) {
+            if (isDebug)
+                console.log("Something wrong, there is no config node:", configNode);
+            return res.json([ROOT_STORAGE_PATH]).end();
         }
-        res.json(tagList).end();
-    }));
+        const storage = (storageName) ?
+            TagStorage.getStoragesByGlobalContext(configNode, storageName) :
+            configNode.tagStorage.storage;
+        const paths = Object.keys(storage);
+        paths.sort();
+        if (!isStats)
+            return res.json(paths).end();
+        const pathsAndStats = paths.map(path => {
+            return [path, {
+                    tagQty: Object.keys(storage[path]).length
+                }];
+        });
+        res.json(pathsAndStats).end();
+    });
+    RED.httpAdmin.get('/__cx_tag_emitter/get_variables', (req, res) => {
+        const configNodeId = req.query["config_node_id"];
+        const parentPath = req.query["parent_path"];
+        if (isDebug)
+            console.log("GET get_variables:", { configNodeId, parentPath });
+        const configNode = RED.nodes.getNode(configNodeId);
+        if (!configNodeId || !parentPath || !configNode || !configNode.tagStorage) {
+            if (isDebug)
+                console.log("Something wrong, there is no config node:", configNode);
+            return res.json([]).end();
+        }
+        const currentTags = configNode.tagStorage.getStorage(parentPath);
+        if (!currentTags)
+            return res.json([]).end();
+        const tagNames = Object.keys(currentTags);
+        tagNames.sort();
+        const values = {};
+        const descriptions = {};
+        for (const tag of tagNames) {
+            if (!currentTags[tag])
+                continue;
+            values[tag] = currentTags[tag].value;
+            if (currentTags[tag].desc)
+                descriptions[tag] = currentTags[tag].desc;
+        }
+        res.json([tagNames, values, descriptions]).end();
+    });
     RED.httpAdmin.post("/__cx_tag_emitter/emit_request/:id", (req, res) => {
         const node = RED.nodes.getNode(req.params.id);
         if (node != null) {
@@ -117,21 +183,34 @@ module.exports = function (RED) {
             res.sendStatus(404);
         }
     });
+    function StorageConfig(config) {
+        RED.nodes.createNode(this, config);
+        const node = this;
+        node.tagStorage = new TagStorage(node, config.storeName);
+    }
     function ValueEmitter(config) {
         RED.nodes.createNode(this, config);
         const node = this;
+        const configNodeId = config.storage;
+        const configNode = RED.nodes.getNode(configNodeId);
+        if (!configNode || !configNode.tagStorage)
+            return node.error("Select Storage Node and its context name");
+        if (typeof config.path !== "string" || !config.path)
+            return node.error("Tags path must be defined");
+        const tagStorage = configNode.tagStorage;
         if (config.emitOnStart) {
             const listenerCounts = RED.events.getMaxListeners() + 1;
             RED.events.setMaxListeners(listenerCounts);
         }
         node.on("input", emitCurrentTags);
-        const parentPath = config.path ? config.path : "";
+        const parentPath = config.path;
+        let isError = false;
         if (config.isToEmitAllChanges) {
-            eventEmitter.on(ALL_CHANGES_CHANNEL, handleAnyTagChange);
+            eventEmitter.on(parentPath + "/" + ALL_CHANGES_CHANNEL, handleAnyTagChange);
             if (config.emitOnStart)
                 RED.events.on("flows:started", emitOnStart);
             node.on("close", () => {
-                eventEmitter.removeListener(ALL_CHANGES_CHANNEL, handleAnyTagChange);
+                eventEmitter.removeListener(parentPath + "/" + ALL_CHANGES_CHANNEL, handleAnyTagChange);
             });
             return;
         }
@@ -173,7 +252,13 @@ module.exports = function (RED) {
         }
         function emitCurrentTags() {
             if (config.isToEmitAllChanges) {
-                const currentTags = TagStorage.getStorage(parentPath);
+                const currentTags = tagStorage.getStorage(parentPath);
+                if (!currentTags) {
+                    handleError("No storage");
+                    return node.error(`Storage at path "${parentPath}" doesn't exist`);
+                }
+                else
+                    handleError();
                 handleAnyTagChange(Object.keys(currentTags));
             }
             else {
@@ -181,33 +266,56 @@ module.exports = function (RED) {
             }
         }
         function handleSomeTagChanges(tagName) {
-            const tag = TagStorage.getTag(tagName, parentPath);
+            const tag = tagStorage.getTag(tagName, parentPath);
             if (!tag)
                 return;
             const isOnlyOneTagToEmit = tagNames.length === 1 && !addedTagNames.length;
             if (isOnlyOneTagToEmit) {
-                node.send({ topic: tagName, payload: tag.value, prevValue: tag.prevValue });
+                node.send(buildMessage(tagName, tag.value, { prevValue: tag.prevValue }));
                 return;
             }
             if (isBatchSent)
                 return;
             const allTagNames = tagNames.concat(addedTagNames);
-            const batchObject = TagStorage.getNameValueObject(allTagNames, parentPath);
-            node.send({ topic: "__some", payload: batchObject });
+            const batchObject = tagStorage.getNameValueObject(allTagNames, parentPath);
+            node.send(buildMessage("__some", batchObject));
             isBatchSent = true;
             setTimeout(() => isBatchSent = false, 0);
         }
         function handleAnyTagChange(idListOfChangedTagValues) {
-            const payload = TagStorage.getNameValueObject(idListOfChangedTagValues, parentPath);
-            node.send({ topic: "__all", payload });
+            const payload = tagStorage.getNameValueObject(idListOfChangedTagValues, parentPath);
+            if (!Object.keys(payload).length)
+                return handleError("Nothing to emit");
+            else
+                handleError();
+            node.send(buildMessage("__all", payload));
+        }
+        function buildMessage(topic, payload, additionalProps) {
+            additionalProps = additionalProps || {};
+            return Object.assign(Object.assign({}, additionalProps), { topic, payload, path: parentPath, storage: tagStorage.name });
+        }
+        function handleError(text) {
+            if (text) {
+                isError = true;
+                return node.status({ fill: "red", shape: "dot", text });
+            }
+            if (isError) {
+                isError = false;
+                node.status("");
+            }
         }
     }
     function TagsIn(config) {
         RED.nodes.createNode(this, config);
         const node = this;
-        if (!TagStorage.globalContext) {
-            TagStorage.setGlobalStorage(node.context().global);
-        }
+        const configNodeId = config.storage;
+        const configNode = RED.nodes.getNode(configNodeId);
+        if (!configNode || !configNode.tagStorage)
+            return node.error("Config 'tag-storage' node must be selected");
+        if (typeof config.path !== "string" || !config.path)
+            return node.error("Tags path must be defined");
+        const parentPath = config.path;
+        const tagStorage = configNode.tagStorage;
         node.on("input", (msg) => {
             const isTooOften = checkIfTooOften();
             lastCall_ms = Date.now();
@@ -215,18 +323,17 @@ module.exports = function (RED) {
                 node.error("Emit cancelled, the node called TOO often!");
                 return;
             }
+            const currentTags = tagStorage.setStorage(parentPath);
             if (msg.deleteTag) {
-                const deletedTagId = TagStorage.deleteTag(msg.topic);
+                const deletedTagId = tagStorage.deleteTag(msg.topic, parentPath);
                 if (deletedTagId) {
-                    node.warn(`Tag with name '${msg.topic}' DELETED`);
+                    node.warn(`Tag '${parentPath}/${msg.topic}' DELETED`);
                 }
                 else {
-                    node.warn(`Tag with name '${msg.topic}' NOT FOUND`);
+                    node.warn(`Tag '${parentPath}/${msg.topic}' NOT FOUND`);
                 }
                 return;
             }
-            const parentPath = config.path ? config.path : "";
-            const currentTags = TagStorage.getStorage(parentPath);
             const namesOfChangedTags = [];
             if (config.isBatch) {
                 const newKeys = Object.keys(msg.payload || {});
@@ -267,7 +374,7 @@ module.exports = function (RED) {
             const newMsg = {};
             if (config.isBatch) {
                 newMsg.topic = msg.topic;
-                newMsg.payload = TagStorage.getNameValueObject(namesOfChangedTags, parentPath);
+                newMsg.payload = tagStorage.getNameValueObject(namesOfChangedTags, parentPath);
             }
             else {
                 newMsg.topic = config.tagName || msg.topic;
@@ -281,16 +388,16 @@ module.exports = function (RED) {
                 const tagPath = parentPath + "/" + changedTag;
                 eventEmitter.emit(tagPath, changedTag);
             }
-            eventEmitter.emit(ALL_CHANGES_CHANNEL, namesOfChangedTags);
+            eventEmitter.emit(parentPath + "/" + ALL_CHANGES_CHANNEL, namesOfChangedTags);
         });
         function setNewTagValueIfChanged(tagId, newValue, path, isToRestore) {
             if (typeof newValue === "function")
                 return;
-            const tagFromStore = TagStorage.getTag(tagId, path);
+            const tagFromStore = tagStorage.getTag(tagId, path);
             const nodeId = isToRestore ? "" : node.id;
             const tag = tagFromStore ? tagFromStore : new Tag(tagId, nodeId);
             if (!tagFromStore)
-                TagStorage.setTag(tag, path);
+                tagStorage.setTag(tag, path);
             const currentValue = tag.value;
             if (isDifferent(newValue, currentValue)) {
                 if (tag.sourceNodeId && tag.sourceNodeId !== node.id) {
@@ -321,6 +428,7 @@ module.exports = function (RED) {
             at10msCounter = 100;
         return at10msFor100times;
     }
+    RED.nodes.registerType("tag-storage", StorageConfig);
     RED.nodes.registerType("value_emitter", ValueEmitter);
     RED.nodes.registerType("tags_in", TagsIn);
 };

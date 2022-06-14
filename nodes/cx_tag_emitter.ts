@@ -517,6 +517,18 @@ module.exports = function(RED: NodeAPI) {
                 return;
             }
 
+            if (msg.toJSON) {
+                const storageCopy: {[teg: string]: any} = {};
+                for (const tagName in currentTags) {
+                    storageCopy[tagName] = {};
+                    storageCopy[tagName].desc = currentTags[tagName].desc || "";
+                    storageCopy[tagName].db = currentTags[tagName].db || 0;
+                    storageCopy[tagName].value = currentTags[tagName].value;
+                }
+                const payload = JSON.stringify(storageCopy);
+                return node.send({topic: "toJSON", payload})
+            }
+
             const namesOfChangedTags: string[] = [];
 
             if (config.isBatch) {

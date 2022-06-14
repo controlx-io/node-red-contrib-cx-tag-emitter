@@ -347,6 +347,17 @@ module.exports = function (RED) {
                 }
                 return;
             }
+            if (msg.toJSON) {
+                const storageCopy = {};
+                for (const tagName in currentTags) {
+                    storageCopy[tagName] = {};
+                    storageCopy[tagName].desc = currentTags[tagName].desc || "";
+                    storageCopy[tagName].db = currentTags[tagName].db || 0;
+                    storageCopy[tagName].value = currentTags[tagName].value;
+                }
+                const payload = JSON.stringify(storageCopy);
+                return node.send({ topic: "toJSON", payload });
+            }
             const namesOfChangedTags = [];
             if (config.isBatch) {
                 const newKeys = Object.keys(msg.payload || {});

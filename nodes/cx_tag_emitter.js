@@ -358,21 +358,36 @@ module.exports = function (RED) {
                 const payload = JSON.stringify(storageCopy);
                 return node.send({ topic: "toJSON", payload });
             }
+            if (msg.setProperties === true) {
+                if (!isObject(msg.payload))
+                    return node.error(".payload must be and an object type, got " +
+                        (msg.payload ? typeof msg.payload : "'null'"));
+                for (const tagName in msg.payload) {
+                    const tag = addTagIfNotExist(tagName, parentPath);
+                    const tagDef = msg.payload[tagName];
+                    if (tagDef.desc && typeof tagDef.desc === "string")
+                        tag.desc = tagDef.desc;
+                    if (tagDef.db && typeof tagDef.db === "number")
+                        tag.db = tagDef.db;
+                }
+                const tagDefQty = Object.keys(msg.payload).length;
+                node.warn(`Added properties for ${tagDefQty} tags.`);
+                return;
+            }
             const namesOfChangedTags = [];
             if (config.isBatch) {
+                if (!isObject(msg.payload))
+                    return node.error(".payload must be and an object type, got " +
+                        (msg.payload ? typeof msg.payload : "'null'"));
                 const newKeys = Object.keys(msg.payload || {});
-                const newDescriptions = Object.keys(msg.desc || {});
-                if (!newKeys.length && !newDescriptions.length)
+                if (!newKeys.length)
                     return;
                 for (const key of newKeys) {
                     const tagName = key;
                     const newValue = msg.payload[key];
-                    const changedTag = setNewTagValueIfChanged(tagName, newValue, parentPath, msg.restoreTags);
+                    const changedTag = setNewTagValueIfChanged(tagName, newValue, parentPath);
                     if (changedTag)
                         namesOfChangedTags.push(changedTag.name);
-                }
-                for (const tagName of newDescriptions) {
-                    currentTags[tagName].desc = msg.desc[tagName].toString();
                 }
             }
             else {
@@ -414,14 +429,10 @@ module.exports = function (RED) {
             }
             eventEmitter.emit(parentPath + "/" + ALL_CHANGES_CHANNEL, namesOfChangedTags);
         });
-        function setNewTagValueIfChanged(tagId, newValue, path, isToRestore) {
+        function setNewTagValueIfChanged(tagId, newValue, path) {
             if (typeof newValue === "function")
                 return;
-            const tagFromStore = tagStorage.getTag(tagId, path);
-            const nodeId = isToRestore ? "" : node.id;
-            const tag = tagFromStore ? tagFromStore : new Tag(tagId, nodeId);
-            if (!tagFromStore)
-                tagStorage.setTag(tag, path);
+            const tag = addTagIfNotExist(tagId, path);
             const currentValue = tag.value;
             if (isDifferent(newValue, currentValue)) {
                 if (tag.sourceNodeId && tag.sourceNodeId !== node.id) {
@@ -433,10 +444,15 @@ module.exports = function (RED) {
                         return;
                 }
                 tag.value = newValue;
-                if (!isToRestore)
-                    tag.sourceNodeId = node.id;
                 return tag;
             }
+        }
+        function addTagIfNotExist(tagId, path) {
+            const tagFromStore = tagStorage.getTag(tagId, path);
+            const tag = tagFromStore ? tagFromStore : new Tag(tagId, node.id);
+            if (!tagFromStore)
+                tagStorage.setTag(tag, path);
+            return tag;
         }
     }
     function checkIfTooOften() {
@@ -467,5 +483,8 @@ function isDifferent(newValue, oldValue) {
         return true;
     }
     return false;
+}
+function isObject(obj) {
+    return !!obj && obj.constructor.name === "Object";
 }
 //# sourceMappingURL=cx_tag_emitter.js.map

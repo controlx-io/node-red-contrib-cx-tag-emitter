@@ -68,13 +68,11 @@
 
 <script type="text/html" data-help-name="tags_in">
   <h3>Inputs</h3>
+  <p>Below are examples of message objects:</p>
   <pre style="overflow-x: scroll; white-space: pre;">
 // if is batch
 payload: {
   tagName: number | boolean | string
-},
-desc: {
-  tagName: string
 }
   </pre>
   <p>OR</p>
@@ -88,6 +86,21 @@ desc?: string // description - optional if specified in Node Config
   <pre style="overflow-x: scroll; white-space: pre;">
 deleteTag: true,
 topic: string // tag name
+  </pre>
+  <p>OR</p>
+  <pre style="overflow-x: scroll; white-space: pre;">
+toJSON: true
+  </pre>
+  <p>OR</p>
+  <pre style="overflow-x: scroll; white-space: pre;">
+setProperties: true // it triggers to add properties to the tags
+payload: {
+  tagName: {            // all properties ar optional
+    desc?: string,
+    value?: tag value,  // set this value DOES NOT trigger the change
+    db?: number         // if the value is number
+  }
+}
   </pre>
 </script>
 

@@ -164,7 +164,6 @@ class Tag {
 }
 
 
-// TODO add deadband
 
 const isDebug = !!process.env["TAG_EMITTER_NODE"];
 
@@ -594,6 +593,14 @@ module.exports = function(RED: NodeAPI) {
                 else if (config.desc)
                     currentTags[tagName].desc = config.desc;
 
+
+                if (typeof msg.db === "number" && isFinite(msg.db))
+                    currentTags[tagName].db = msg.db;
+                else if (config.deadband) {
+                    const db = Number.parseFloat(config.deadband);
+                    currentTags[tagName].db = isFinite(db) ? db : 0;
+                }
+
             }
 
             if (!namesOfChangedTags.length) return;
@@ -640,7 +647,11 @@ module.exports = function(RED: NodeAPI) {
 
                 // check if out of the deadband, if not return
                 if (tag.db && typeof newValue === "number" && typeof currentValue === "number") {
-                    if (newValue - currentValue < tag.db) return;
+                    const diff = Math.abs(newValue - currentValue);
+                    if (diff < tag.db) {
+                        // if (isDebug) console.log(`diff [${diff}] is smaller than deadband [${tag.db}]`)
+                        return
+                    }
                 }
 
 

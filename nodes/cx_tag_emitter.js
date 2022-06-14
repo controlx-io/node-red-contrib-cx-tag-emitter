@@ -407,6 +407,12 @@ module.exports = function (RED) {
                     currentTags[tagName].desc = msg.desc;
                 else if (config.desc)
                     currentTags[tagName].desc = config.desc;
+                if (typeof msg.db === "number" && isFinite(msg.db))
+                    currentTags[tagName].db = msg.db;
+                else if (config.deadband) {
+                    const db = Number.parseFloat(config.deadband);
+                    currentTags[tagName].db = isFinite(db) ? db : 0;
+                }
             }
             if (!namesOfChangedTags.length)
                 return;
@@ -440,8 +446,10 @@ module.exports = function (RED) {
                         `From ${tag.sourceNodeId} to ${node.id}`);
                 }
                 if (tag.db && typeof newValue === "number" && typeof currentValue === "number") {
-                    if (newValue - currentValue < tag.db)
+                    const diff = Math.abs(newValue - currentValue);
+                    if (diff < tag.db) {
                         return;
+                    }
                 }
                 tag.value = newValue;
                 return tag;

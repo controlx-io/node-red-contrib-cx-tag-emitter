@@ -187,6 +187,19 @@ module.exports = function (RED) {
         RED.nodes.createNode(this, config);
         const node = this;
         node.tagStorage = new TagStorage(node, config.storeName);
+        if (RED.util.cxGetTag)
+            return;
+        RED.util.cxGetTag = function (tagName, path, storageName) {
+            if (!tagName)
+                return;
+            storageName = (!storageName || typeof storageName !== "string") ? "default" : storageName;
+            const storage = TagStorage.getStoragesByGlobalContext(node, storageName);
+            path = (!path || typeof path !== "string") ? ROOT_STORAGE_PATH : path;
+            const container = storage[path];
+            if (!container)
+                return;
+            return container[tagName];
+        };
     }
     function ValueEmitter(config) {
         RED.nodes.createNode(this, config);

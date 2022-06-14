@@ -165,8 +165,6 @@ class Tag {
 
 
 // TODO add deadband
-// TODO attach tags.get() and tags.set() to RED object
-// TODO add tag manager table in Tag Emitter node
 
 const isDebug = !!process.env["TAG_EMITTER_NODE"];
 
@@ -274,6 +272,26 @@ module.exports = function(RED: NodeAPI) {
         const node: IStorageManagerNode = this;
 
         node.tagStorage = new TagStorage(node, config.storeName);
+
+
+        // below is to attach custom function to the RED body
+        // the function is getting reference of the tag. This can help get tags in Node RED functions
+        // @ts-ignore
+        if (RED.util.cxGetTag) return;
+        // @ts-ignore
+        RED.util.cxGetTag = function(tagName?: any, path?: any, storageName?: any) {
+            if (!tagName) return;
+
+            storageName = (!storageName || typeof storageName !== "string") ? "default" : storageName;
+            const storage = TagStorage.getStoragesByGlobalContext(node, storageName);
+
+            path = (!path || typeof path !== "string") ? ROOT_STORAGE_PATH : path;
+            const container = storage[path];
+
+            if (!container) return;
+
+            return container[tagName];
+        }
     }
 
 

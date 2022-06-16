@@ -134,7 +134,7 @@ payload: {
   <div id="node-input-section1">
     <div class="form-row">
       <label for="node-input-tagName">Emitted Tag(s)</label>
-      <input type="text" id="node-input-tagName" placeholder="SysOk_S">
+      <input type="text" id="node-input-tagName" placeholder="tag1,tag2,tag3">
     </div>
     <div class="form-row">
       <label for="node-input-addedTagName">Add Tag(s)</label>
@@ -321,7 +321,10 @@ payload: {
       icon: "link-out.png",
       paletteLabel: "Tags In",
       label: function() {
-        return this.name || ( this.isBatch ? "Batch In" : (this.tagName || "Tag In"));
+        return this.name || (
+                this.isBatch ?
+                        "Batch In" :
+                        ((this.tagName || "Tag In") + (this.deadband == 0 ? "" : " ±" + this.deadband)));
       },
       oneditprepare: function() {
 
@@ -504,18 +507,21 @@ payload: {
 
         tagNameEl.autoComplete({
           search: function(val) {
+            const parts = val.split(",");
+            const tagName = parts.splice(-1)[0];
+            const prevTagNames = parts.join(",") + (parts.length ? "," : "");
             const matches = [];
-            varNames.forEach(v => {
-              let i = v.toLowerCase().indexOf(val.toLowerCase());
+            for (const varName of varNames) {
+              const i = varName.toLowerCase().indexOf(tagName.toLowerCase());
               if (i > -1) {
                 matches.push({
-                  value: v,
-                  label: v,
+                  value: prevTagNames + varName,
+                  label: varName,
                   i: i
                 })
               }
-            });
-            matches.sort(function(A,B){return A.i-B.i})
+            }
+            matches.sort((a, b) => a.i - b.i);
             return matches
           }
         })

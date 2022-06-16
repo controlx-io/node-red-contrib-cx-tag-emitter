@@ -215,6 +215,7 @@ module.exports = function (RED) {
             const listenerCounts = RED.events.getMaxListeners() + 1;
             RED.events.setMaxListeners(listenerCounts);
         }
+        node.status({ fill: "grey", shape: "ring" });
         node.on("input", emitCurrentTags);
         const parentPath = config.path;
         let isError = false;
@@ -236,7 +237,7 @@ module.exports = function (RED) {
             config.addedTagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
         if (!tagNames.length)
             return;
-        let isBatchSent = false;
+        let batchQty = 0;
         for (const tagName of tagNames) {
             const tagPath = parentPath + "/" + tagName;
             eventEmitter.on(tagPath, handleSomeTagChanges);
@@ -284,16 +285,22 @@ module.exports = function (RED) {
                 return;
             const isOnlyOneTagToEmit = tagNames.length === 1 && !addedTagNames.length;
             if (isOnlyOneTagToEmit) {
+                const valueStr = tag.value == null ? "" : tag.value.toString();
+                node.status({ text: valueStr, fill: "grey", shape: "dot" });
                 node.send(buildMessage(tagName, tag.value, { prevValue: tag.prevValue }));
                 return;
             }
-            if (isBatchSent)
+            batchQty++;
+            if (batchQty > 1)
                 return;
             const allTagNames = tagNames.concat(addedTagNames);
             const batchObject = tagStorage.getNameValueObject(allTagNames, parentPath);
             node.send(buildMessage("__some", batchObject));
-            isBatchSent = true;
-            setTimeout(() => isBatchSent = false, 0);
+            setTimeout(() => {
+                const text = tagNames.length === 1 ? batchObject[tagNames[0]] : batchQty + " change(s)";
+                node.status({ text, fill: "grey", shape: "dot" });
+                batchQty = 0;
+            }, 0);
         }
         function handleAnyTagChange(idListOfChangedTagValues) {
             const payload = tagStorage.getNameValueObject(idListOfChangedTagValues, parentPath);
@@ -329,6 +336,7 @@ module.exports = function (RED) {
             return node.error("Tags path must be defined");
         const parentPath = config.path;
         const tagStorage = configNode.tagStorage;
+        node.status({ fill: "grey", shape: "ring" });
         node.on("input", (msg) => {
             const isTooOften = checkIfTooOften();
             lastCall_ms = Date.now();
@@ -338,16 +346,19 @@ module.exports = function (RED) {
             }
             const currentTags = tagStorage.setStorage(parentPath);
             if (msg.deleteTag) {
+                msg.topic = msg.topic != null ? msg.topic.toString() : "";
                 const deletedTagId = tagStorage.deleteTag(msg.topic, parentPath);
                 if (deletedTagId) {
                     node.warn(`Tag '${parentPath}/${msg.topic}' DELETED`);
+                    node.status({ text: `DELETED: ${msg.topic}`, fill: "green", shape: "dot" });
                 }
                 else {
                     node.warn(`Tag '${parentPath}/${msg.topic}' NOT FOUND`);
+                    node.status({ text: `NOT FOUND: ${msg.topic}`, fill: "red", shape: "dot" });
                 }
                 return;
             }
-            if (msg.toJSON) {
+            if (msg.toJSON === true) {
                 const storageCopy = {};
                 for (const tagName in currentTags) {
                     storageCopy[tagName] = {};
@@ -356,6 +367,8 @@ module.exports = function (RED) {
                     storageCopy[tagName].value = currentTags[tagName].value;
                 }
                 const payload = JSON.stringify(storageCopy);
+                const length = Object.keys(currentTags).length;
+                node.status({ text: `${length} tags exported`, fill: "green", shape: "dot" });
                 return node.send({ topic: "toJSON", payload });
             }
             if (msg.setProperties === true) {
@@ -371,6 +384,7 @@ module.exports = function (RED) {
                         tag.db = tagDef.db;
                 }
                 const tagDefQty = Object.keys(msg.payload).length;
+                node.status({ text: `${tagDefQty} properties set`, fill: "green", shape: "dot" });
                 node.warn(`Added properties for ${tagDefQty} tags.`);
                 return;
             }
@@ -389,6 +403,8 @@ module.exports = function (RED) {
                     if (changedTag)
                         namesOfChangedTags.push(changedTag.name);
                 }
+                if (namesOfChangedTags.length)
+                    node.status({ text: namesOfChangedTags.length + " tag(s) in", fill: "grey", shape: "dot" });
             }
             else {
                 const tagName = config.tagName || msg.topic;
@@ -413,6 +429,8 @@ module.exports = function (RED) {
                     const db = Number.parseFloat(config.deadband);
                     currentTags[tagName].db = isFinite(db) ? db : 0;
                 }
+                if (namesOfChangedTags.length)
+                    node.status({ text: newValue.toString(), fill: "grey", shape: "dot" });
             }
             if (!namesOfChangedTags.length)
                 return;

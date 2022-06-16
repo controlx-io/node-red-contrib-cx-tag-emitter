@@ -1,5 +1,6 @@
 import {Node, NodeAPI, NodeDef} from "node-red";
 import {EventEmitter} from "events";
+import {NodeStatusFill} from "@node-red/registry";
 
 interface ITagInNodeConfig extends NodeDef {
     storage: string, // storage config node ID
@@ -318,6 +319,7 @@ module.exports = function(RED: NodeAPI) {
             RED.events.setMaxListeners(listenerCounts);
         }
 
+        node.status({fill: "grey", shape: "ring"});
         node.on("input", emitCurrentTags);
         const parentPath = config.path;
         let isError = false;
@@ -355,7 +357,7 @@ module.exports = function(RED: NodeAPI) {
         if (!tagNames.length) return;
 
 
-        let isBatchSent = false;
+        let batchQty = 0;
 
         for (const tagName of tagNames) {
             const tagPath = parentPath + "/" + tagName;
@@ -420,8 +422,9 @@ module.exports = function(RED: NodeAPI) {
             const isOnlyOneTagToEmit = tagNames.length === 1 && !addedTagNames.length;
 
             if (isOnlyOneTagToEmit) {
+                const valueStr = tag.value == null ? "" : tag.value.toString();
+                node.status({text: valueStr, fill: "grey", shape: "dot" });
                 node.send(buildMessage(tagName, tag.value, {prevValue: tag.prevValue}))
-                // node.send({topic: tagName, payload: tag.value, prevValue: tag.prevValue, path: parentPath});
                 return;
             }
 
@@ -429,15 +432,19 @@ module.exports = function(RED: NodeAPI) {
             // When config.tagName has multiple tags (eg. STRING_TAG_1, NUMBER_TAG_1,BOOLEAN_TAG_1)
             // the node EMITS multiple times (eg. 3 times)
             // Solution is to send the BATCH in this JS Loop, prevent from sending and let in the next JS loop
-            if (isBatchSent) return;
+            batchQty++;
+            if (batchQty > 1) return;
 
             const allTagNames = tagNames.concat(addedTagNames);
             const batchObject = tagStorage.getNameValueObject(allTagNames, parentPath);
             node.send(buildMessage("__some", batchObject))
-            isBatchSent = true;
 
-            // remove isBatchSent flag in the next JS loop
-            setTimeout(() => isBatchSent = false, 0)
+            // remove batchQty flag in the next JS loop
+            setTimeout(() => {
+                const text = tagNames.length === 1 ? batchObject[tagNames[0]] : batchQty + " change(s)";
+                node.status({text, fill: "grey", shape: "dot" });
+                batchQty = 0;
+            }, 0)
         }
 
         function handleAnyTagChange(idListOfChangedTagValues: string[]) {
@@ -481,7 +488,7 @@ module.exports = function(RED: NodeAPI) {
 
         // @ts-ignore
         RED.nodes.createNode(this, config);
-        const node = this;
+        const node: Node = this;
 
         // get storage node ID from the config
         const configNodeId = config.storage;
@@ -494,6 +501,7 @@ module.exports = function(RED: NodeAPI) {
 
         const parentPath = config.path;
         const tagStorage = configNode.tagStorage;
+        node.status({fill: "grey", shape: "ring"});
 
         node.on("input", (msg: any) => {
 
@@ -507,16 +515,19 @@ module.exports = function(RED: NodeAPI) {
             const currentTags: ITagStorage = tagStorage.setStorage(parentPath);
 
             if (msg.deleteTag) {
+                msg.topic = msg.topic != null ? msg.topic.toString() : "";
                 const deletedTagId = tagStorage.deleteTag(msg.topic, parentPath);
                 if (deletedTagId) {
                     node.warn(`Tag '${parentPath}/${msg.topic}' DELETED`);
+                    node.status({text:`DELETED: ${msg.topic}`, fill: "green", shape: "dot" });
                 } else {
                     node.warn(`Tag '${parentPath}/${msg.topic}' NOT FOUND`);
+                    node.status({text:`NOT FOUND: ${msg.topic}`, fill: "red", shape: "dot" });
                 }
                 return;
             }
 
-            if (msg.toJSON) {
+            if (msg.toJSON === true) {
                 const storageCopy: {[teg: string]: any} = {};
                 for (const tagName in currentTags) {
                     storageCopy[tagName] = {};
@@ -525,6 +536,10 @@ module.exports = function(RED: NodeAPI) {
                     storageCopy[tagName].value = currentTags[tagName].value;
                 }
                 const payload = JSON.stringify(storageCopy);
+
+                const length = Object.keys(currentTags).length;
+
+                node.status({text:`${length} tags exported`, fill: "green", shape: "dot" });
                 return node.send({topic: "toJSON", payload})
             }
 
@@ -541,7 +556,7 @@ module.exports = function(RED: NodeAPI) {
                 }
 
                 const tagDefQty = Object.keys(msg.payload).length;
-
+                node.status({text:`${tagDefQty} properties set`, fill: "green", shape: "dot" });
                 node.warn(`Added properties for ${tagDefQty} tags.`)
                 return;
             }
@@ -567,6 +582,9 @@ module.exports = function(RED: NodeAPI) {
                     if (changedTag)
                         namesOfChangedTags.push(changedTag.name);
                 }
+
+                if (namesOfChangedTags.length)
+                    node.status({text: namesOfChangedTags.length + " tag(s) in", fill: "grey", shape: "dot"});
             } else {
 
                 // this is then SINGLE Tag IN
@@ -601,6 +619,8 @@ module.exports = function(RED: NodeAPI) {
                     currentTags[tagName].db = isFinite(db) ? db : 0;
                 }
 
+                if (namesOfChangedTags.length)
+                    node.status({text: newValue.toString(), fill: "grey", shape: "dot"});
             }
 
             if (!namesOfChangedTags.length) return;

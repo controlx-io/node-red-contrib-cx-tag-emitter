@@ -69,6 +69,19 @@ class TagStorage {
         }
         return out;
     }
+    getNameValueObjectFr0mTagConfigs(tagConfigsList) {
+        const out = {};
+        for (const tagConf of tagConfigsList) {
+            const storage = this.storage[tagConf.path || ""];
+            if (!storage)
+                continue;
+            const tag = storage[tagConf.name];
+            if (!tag)
+                continue;
+            out[tag.name] = tag.value;
+        }
+        return out;
+    }
     deleteTag(tagId, path) {
         path = path || ROOT_STORAGE_PATH;
         const storage = this.storage[path];
@@ -223,37 +236,39 @@ module.exports = function (RED) {
             eventEmitter.on(parentPath + "/" + ALL_CHANGES_CHANNEL, handleAnyTagChange);
             if (config.emitOnStart)
                 RED.events.on("flows:started", emitOnStart);
+            node.status({ fill: "grey", shape: "dot", text: "from: " + parentPath });
             node.on("close", () => {
                 eventEmitter.removeListener(parentPath + "/" + ALL_CHANGES_CHANNEL, handleAnyTagChange);
             });
             return;
         }
-        if (!config.tagName || typeof config.tagName !== "string") {
-            node.error("Tag Name is not provided");
+        if (!Array.isArray(config.tags) || !config.tags.length) {
+            node.error("Tag Names are not provided");
             return;
         }
-        const tagNames = config.tagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
-        const addedTagNames = !config.addedTagName ? [] :
-            config.addedTagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
-        if (!tagNames.length)
+        const tagConfigs = config.tags.filter(tagConf => !!tagConf.name);
+        if (!tagConfigs.length)
             return;
+        const addedTags = tagConfigs.filter(tagConf => tagConf.isAdded);
+        const emittedTags = tagConfigs.filter(tagConf => !tagConf.isAdded);
+        const isOnlyOneTagToEmit = emittedTags.length === 1 && !addedTags.length;
         let batchQty = 0;
-        for (const tagName of tagNames) {
-            const tagPath = parentPath + "/" + tagName;
+        for (const tag of emittedTags) {
+            const tagPath = tag.path + "/" + tag.name;
             eventEmitter.on(tagPath, handleSomeTagChanges);
-            if (!tagListenerCounter[tagName])
-                tagListenerCounter[tagName] = 0;
-            tagListenerCounter[tagName]++;
+            if (!tagListenerCounter[tag.name])
+                tagListenerCounter[tag.name] = 0;
+            tagListenerCounter[tag.name]++;
         }
         const max = Math.max(...Object.values(tagListenerCounter));
         eventEmitter.setMaxListeners(max + 10);
         if (config.emitOnStart)
             RED.events.on("flows:started", emitOnStart);
         node.on("close", () => {
-            for (const tagName of tagNames) {
-                const tagPath = parentPath + "/" + tagName;
+            for (const tag of emittedTags) {
+                const tagPath = tag.path + "/" + tag.name;
                 eventEmitter.removeListener(tagPath, handleSomeTagChanges);
-                tagListenerCounter[tagName]--;
+                tagListenerCounter[tag.name]--;
                 const listenerCount = eventEmitter.getMaxListeners();
                 eventEmitter.setMaxListeners(listenerCount - 1);
             }
@@ -275,29 +290,28 @@ module.exports = function (RED) {
                     handleError();
                 handleAnyTagChange(Object.keys(currentTags));
             }
-            else {
-                tagNames.forEach(handleSomeTagChanges);
+            else if (emittedTags) {
+                emittedTags.forEach(handleSomeTagChanges);
             }
         }
-        function handleSomeTagChanges(tagName) {
-            const tag = tagStorage.getTag(tagName, parentPath);
+        function handleSomeTagChanges(tagConf) {
+            const tag = tagStorage.getTag(tagConf.name, parentPath);
             if (!tag)
                 return;
-            const isOnlyOneTagToEmit = tagNames.length === 1 && !addedTagNames.length;
+            const tagPath = tagConf.path || "";
             if (isOnlyOneTagToEmit) {
                 const valueStr = tag.value == null ? "" : tag.value.toString();
                 node.status({ text: valueStr, fill: "grey", shape: "dot" });
-                node.send(buildMessage(tagName, tag.value, { prevValue: tag.prevValue }));
+                node.send(buildMessage(tagConf.name, tag.value, tagPath, { prevValue: tag.prevValue }));
                 return;
             }
             batchQty++;
             if (batchQty > 1)
                 return;
-            const allTagNames = tagNames.concat(addedTagNames);
-            const batchObject = tagStorage.getNameValueObject(allTagNames, parentPath);
-            node.send(buildMessage("__some", batchObject));
             setTimeout(() => {
-                const text = tagNames.length === 1 ? batchObject[tagNames[0]] : batchQty + " change(s)";
+                const batchObject = tagStorage.getNameValueObjectFr0mTagConfigs(tagConfigs);
+                node.send(buildMessage("__some", batchObject, tagPath));
+                const text = tagConfigs.length === 1 ? batchObject[tagConfigs[0].name] : batchQty + " change(s)";
                 node.status({ text, fill: "grey", shape: "dot" });
                 batchQty = 0;
             }, 0);
@@ -308,11 +322,12 @@ module.exports = function (RED) {
                 return handleError("Nothing to emit");
             else
                 handleError();
-            node.send(buildMessage("__all", payload));
+            node.send(buildMessage("__all", payload, parentPath));
         }
-        function buildMessage(topic, payload, additionalProps) {
+        function buildMessage(topic, payload, path, additionalProps) {
             additionalProps = additionalProps || {};
-            return Object.assign(Object.assign({}, additionalProps), { topic, payload, path: parentPath, storage: tagStorage.name });
+            return Object.assign(Object.assign({}, additionalProps), { topic, payload,
+                path, storage: tagStorage.name });
         }
         function handleError(text) {
             if (text) {
@@ -449,7 +464,8 @@ module.exports = function (RED) {
             node.send(newMsg);
             for (const changedTag of namesOfChangedTags) {
                 const tagPath = parentPath + "/" + changedTag;
-                eventEmitter.emit(tagPath, changedTag);
+                const tagConfig = { path: parentPath, name: changedTag };
+                eventEmitter.emit(tagPath, tagConfig);
             }
             eventEmitter.emit(parentPath + "/" + ALL_CHANGES_CHANNEL, namesOfChangedTags);
         });

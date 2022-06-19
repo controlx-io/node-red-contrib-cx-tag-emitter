@@ -13,7 +13,14 @@ interface ITagInNodeConfig extends NodeDef {
     deadband?: string
 }
 
+interface ITagEmitConfig {
+    name: string,
+    isAdded?: boolean,
+    path?: string
+}
+
 interface IValueEmitterConfig extends NodeDef {
+    tags?: ITagEmitConfig[];
     storage: string, // storage config node ID
     path: string;
     addedTagName: string;
@@ -117,6 +124,18 @@ class TagStorage {
 
         for (const tagId of tagIdList) {
             const tag = storage[tagId];
+            if (!tag) continue;
+            out[tag.name] = tag.value;
+        }
+        return out
+    }
+
+    getNameValueObjectFr0mTagConfigs(tagConfigsList: ITagEmitConfig[]): ITagNameValueObject {
+        const out: ITagNameValueObject = {};
+        for (const tagConf of tagConfigsList) {
+            const storage = this.storage[tagConf.path || ""];
+            if (!storage) continue;
+            const tag = storage[tagConf.name];
             if (!tag) continue;
             out[tag.name] = tag.value;
         }
@@ -332,6 +351,7 @@ module.exports = function(RED: NodeAPI) {
             if (config.emitOnStart)
                 RED.events.on("flows:started", emitOnStart)
 
+            node.status({fill: "grey", shape: "dot", text: "from: " + parentPath});
 
             node.on("close", () => {
                 eventEmitter.removeListener(parentPath + "/" + ALL_CHANGES_CHANNEL, handleAnyTagChange)
@@ -343,29 +363,30 @@ module.exports = function(RED: NodeAPI) {
         //
         // ============= This is if SOME or ONE tag changes emitted ==============
         //
-        if (!config.tagName || typeof config.tagName !== "string") {
-            node.error("Tag Name is not provided");
+        if (!Array.isArray(config.tags) || !config.tags.length) {
+            node.error("Tag Names are not provided");
             return;
         }
 
         // split by comma, trim and remove empty results
-        const tagNames = config.tagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
-        const addedTagNames = !config.addedTagName ? [] :
-            config.addedTagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
+        const tagConfigs: ITagEmitConfig[] = config.tags.filter(tagConf => !!tagConf.name);
 
         // don't bother going further if no tags selected
-        if (!tagNames.length) return;
+        if (!tagConfigs.length) return;
 
+        const addedTags = tagConfigs.filter(tagConf => tagConf.isAdded);
+        const emittedTags = tagConfigs.filter(tagConf => !tagConf.isAdded);
+        const isOnlyOneTagToEmit = emittedTags.length === 1 && !addedTags.length;
 
         let batchQty = 0;
 
-        for (const tagName of tagNames) {
-            const tagPath = parentPath + "/" + tagName;
+        for (const tag of emittedTags) {
+            const tagPath = tag.path + "/" + tag.name;
             eventEmitter.on(tagPath, handleSomeTagChanges);
 
             // fixing MaxListenersExceededWarning
-            if (!tagListenerCounter[tagName]) tagListenerCounter[tagName] = 0;
-            tagListenerCounter[tagName]++;
+            if (!tagListenerCounter[tag.name]) tagListenerCounter[tag.name] = 0;
+            tagListenerCounter[tag.name]++;
         }
 
         const max = Math.max(...Object.values(tagListenerCounter));
@@ -376,10 +397,10 @@ module.exports = function(RED: NodeAPI) {
             RED.events.on("flows:started", emitOnStart);
 
         node.on("close", () => {
-            for (const tagName of tagNames) {
-                const tagPath = parentPath + "/" + tagName;
+            for (const tag of emittedTags) {
+                const tagPath = tag.path + "/" + tag.name;
                 eventEmitter.removeListener(tagPath, handleSomeTagChanges);
-                tagListenerCounter[tagName]--;
+                tagListenerCounter[tag.name]--;
 
                 const listenerCount = eventEmitter.getMaxListeners();
                 eventEmitter.setMaxListeners(listenerCount - 1);
@@ -409,22 +430,22 @@ module.exports = function(RED: NodeAPI) {
 
                 handleAnyTagChange(Object.keys(currentTags));
 
-            } else {
-                tagNames.forEach(handleSomeTagChanges);
+            } else if (emittedTags) {
+                emittedTags.forEach(handleSomeTagChanges);
             }
         }
 
         // FROM: eventEmitter.emit(path + "/" + changedTag, changedTag);
-        function handleSomeTagChanges(tagName: string) {
-            const tag = tagStorage.getTag(tagName, parentPath);
+        function handleSomeTagChanges(tagConf: ITagEmitConfig) {
+            const tag = tagStorage.getTag(tagConf.name, parentPath);
             if (!tag) return;
 
-            const isOnlyOneTagToEmit = tagNames.length === 1 && !addedTagNames.length;
+            const tagPath = tagConf.path || "";
 
             if (isOnlyOneTagToEmit) {
                 const valueStr = tag.value == null ? "" : tag.value.toString();
                 node.status({text: valueStr, fill: "grey", shape: "dot" });
-                node.send(buildMessage(tagName, tag.value, {prevValue: tag.prevValue}))
+                node.send(buildMessage(tagConf.name, tag.value, tagPath,{prevValue: tag.prevValue}))
                 return;
             }
 
@@ -435,13 +456,12 @@ module.exports = function(RED: NodeAPI) {
             batchQty++;
             if (batchQty > 1) return;
 
-            const allTagNames = tagNames.concat(addedTagNames);
-            const batchObject = tagStorage.getNameValueObject(allTagNames, parentPath);
-            node.send(buildMessage("__some", batchObject))
-
             // remove batchQty flag in the next JS loop
             setTimeout(() => {
-                const text = tagNames.length === 1 ? batchObject[tagNames[0]] : batchQty + " change(s)";
+                const batchObject = tagStorage.getNameValueObjectFr0mTagConfigs(tagConfigs);
+                node.send(buildMessage("__some", batchObject, tagPath))
+
+                const text = tagConfigs.length === 1 ? batchObject[tagConfigs[0].name] : batchQty + " change(s)";
                 node.status({text, fill: "grey", shape: "dot" });
                 batchQty = 0;
             }, 0)
@@ -454,15 +474,15 @@ module.exports = function(RED: NodeAPI) {
                 return handleError("Nothing to emit");
             else handleError();
 
-            node.send(buildMessage("__all", payload))
+            node.send(buildMessage("__all", payload, parentPath))
         }
 
-        function buildMessage(topic: string, payload: any, additionalProps?: {[key: string]: any}) {
+        function buildMessage(topic: string, payload: any, path: string, additionalProps?: {[key: string]: any}) {
             additionalProps = additionalProps || {};
             return {
                 ...additionalProps,
                 topic, payload,
-                path: parentPath,
+                path,
                 storage: tagStorage.name
             }
         }
@@ -643,9 +663,9 @@ module.exports = function(RED: NodeAPI) {
 
             for (const changedTag of namesOfChangedTags) {
                 const tagPath = parentPath + "/" + changedTag;
-
+                const tagConfig: ITagEmitConfig = {path: parentPath, name: changedTag};
                 // function handleSomeTagChanges(tagName: string)
-                eventEmitter.emit(tagPath, changedTag);
+                eventEmitter.emit(tagPath, tagConfig);
             }
             eventEmitter.emit(parentPath + "/" + ALL_CHANGES_CHANNEL, namesOfChangedTags);
         });

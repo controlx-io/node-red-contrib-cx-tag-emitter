@@ -132,13 +132,12 @@ payload: {
     <span>Emit On Start</span>
   </div>
   <div id="node-input-section1">
-    <div class="form-row">
-      <label for="node-input-tagName">Emitted Tag(s)</label>
-      <input type="text" id="node-input-tagName" placeholder="tag1,tag2,tag3">
+
+    <div class="form-row" style="margin-bottom:0;">
+      <label style="width: auto;"><i class="fa fa-list"></i> Tag List: path, prevent emit on change, tag name </label>
     </div>
-    <div class="form-row">
-      <label for="node-input-addedTagName">Add Tag(s)</label>
-      <input type="text" id="node-input-addedTagName" placeholder="tags will be added, but not trigger on it's change">
+    <div class="form-row node-input-headers-container-row">
+      <ol id="node-input-headers-container"></ol>
     </div>
     <div class="form-row">
       <label for="node-input-refreshValues">Refresh Tags</label>
@@ -411,21 +410,25 @@ payload: {
         path: {value: "[root]", required: true},
         name: {value: ""},
         isToEmitAllChanges: {value: false},
-        tagName: {value: "", required: true},
+        tagName: {value: ""},
         addedTagName: {value: ""},
         emitOnStart: {value: true},
+        tags: {value: []}
       },
       inputs: 0,
       outputs: 1,
       icon: "link-out.png",
       paletteLabel: "Emit tag",
       label: function() {
-        const add = this.addedTagName ? " +" : "";
-        return this.name || (
-                this.isToEmitAllChanges ?
-                        "Emits: all" :
-                        ((this.tagName.includes(",") ? "Emits: some" : "Emits:" + this.tagName) + add)
-        );
+        if (this.name)
+          return this.name
+
+        const firstEmittedTag = (this.tags || []).filter(tag => tag.name && !tag.isAdded);
+        let labelName = !firstEmittedTag.length ? "none" :
+                firstEmittedTag.length === 1 ? firstEmittedTag[0].name : "some";
+        if ((this.tags || []).some(tag => tag.name && tag.isAdded)) labelName += " +";
+
+       return this.isToEmitAllChanges ? "Emits: all" : "Emits: " + labelName;
       },
       button: {
         enabled: function() {
@@ -446,10 +449,7 @@ payload: {
             data: JSON.stringify(customMsg),
             contentType: "application/json; charset=utf-8",
             success: () => {
-              const tagsEmitted = this.isToEmitAllChanges ?
-                      "all" : this.tagName;
-
-              RED.notify("Emitted: " + tagsEmitted, { type: "success", id: "inject", timeout: 2000 });
+              RED.notify("Emitted", { type: "success", id: "inject", timeout: 2000 });
             },
             error: function (jqXHR) {
               RED.notify("Error " + jqXHR.status, "error");
@@ -458,12 +458,12 @@ payload: {
         }
       },
       oneditprepare: function () {
+        let paths = [];
         const sectionEl = $('#node-input-section1');
         const isToEmitAllChangesEl = $('#node-input-isToEmitAllChanges');
         const refreshValuesEl = $('#node-input-refreshValues');
         const refreshValuesLabelEl = $('#node-input-refreshValuesLabel');
         const pathSelectEl = $('#node-input-path');
-        const tagNameEl = $('#node-input-tagName');
         const storageEl = $("#node-input-storage");
 
         let currentStorageSelection = "";
@@ -493,7 +493,7 @@ payload: {
           const storageConfigNode = RED.nodes.node(storageNodeId);
           if (!storageConfigNode) return;
 
-          const paths = await getPaths(storageNodeId);
+          paths = await getPaths(storageNodeId);
 
           for (const path of paths) {
             pathSelectEl.append($("<option>", {value: path, text: path}));
@@ -505,32 +505,11 @@ payload: {
         });
 
 
-        tagNameEl.autoComplete({
-          search: function(val) {
-            const parts = val.split(",");
-            const tagName = parts.splice(-1)[0];
-            const prevTagNames = parts.join(",") + (parts.length ? "," : "");
-            const matches = [];
-            for (const varName of varNames) {
-              const i = varName.toLowerCase().indexOf(tagName.toLowerCase());
-              if (i > -1) {
-                matches.push({
-                  value: prevTagNames + varName,
-                  label: varName,
-                  i: i
-                })
-              }
-            }
-            matches.sort((a, b) => a.i - b.i);
-            return matches
-          }
-        })
-
-        function getVariableValues() {
+        function getVariableValues(tagPath) {
           const storageNodeId = storageEl.val();
           const storageConfigNode = RED.nodes.node(storageNodeId);
 
-          const parentPath = pathSelectEl.val();
+          const parentPath = (tagPath && typeof tagPath === "string") ? tagPath : pathSelectEl.val();
           if (!storageConfigNode || !parentPath || isToEmitAllChangesEl.is(':checked')) return;
 
           const varNameListEl = $("#node-input-tag-name-list");
@@ -547,7 +526,7 @@ payload: {
             if (!tagNames || !tagNames.length)
               return varNameListEl.text("No tags here :( Try another path.");
 
-            let out = "";
+            let out = "Tags at " + parentPath + ":\n";
             for (const tagName of tagNames) {
               const value = values[tagName];
               const desc = descriptions[tagName];
@@ -561,6 +540,95 @@ payload: {
 
             varNames = tagNames;
           });
+        }
+
+        const headerList = $("#node-input-headers-container").css('min-height','250px').css('min-width','400px').editableList({
+          addItem: function(container, i, tag) {
+            const row = $('<div/>').css({
+              overflow: 'hidden',
+              whiteSpace: 'nowrap',
+              display: 'flex'
+            }).appendTo(container);
+            const tagPathCell = $('<div/>').css({'flex-grow':1}).appendTo(row);
+            const tagPathEl = $('<input/>', {
+              class:"node-input-header-name", type:"text", style:"width: 100%",
+            }).attr("placeholder", "e.g. area1/machine1")
+              .appendTo(tagPathCell);
+
+            const iaAddedCell = $('<div/>').css({'flex-grow':1,'margin-left':'5px'}).appendTo(row);
+            const isAddedEl =  $('<input/>',{class:"node-input-header-check",type:"checkbox",style:"width: 100%"})
+                    .appendTo(iaAddedCell);
+
+            const propertyValueCell = $('<div/>').css({'flex-grow':1,'margin-left':'5px'}).appendTo(row);
+            const tagNameEl = $('<input/>', {
+              class:"node-input-header-value",type:"text",style:"width: 100%"
+            }).attr("placeholder", "e.g. tag1")
+              .appendTo(propertyValueCell);
+
+
+            tagPathEl.autoComplete({
+              search: function(val) {
+                const matches = [];
+                paths.forEach(v => {
+                  let i = v.toLowerCase().indexOf(val.toLowerCase());
+                  if (i > -1)
+                    matches.push({value: v, label: v, i});
+                });
+                matches.sort(function(A,B){return A.i-B.i})
+                return matches
+              }
+            })
+
+            if (!tag.name) return;
+
+            tagNameEl.val(tag.name);
+            if (tag.path) tagPathEl.val(tag.path);
+            if (tag.isAdded) isAddedEl.prop('checked', true);
+          },
+          removable: true
+        });
+
+
+        // auto migration from two Inputs to the Item List
+        if ((this.tagName || this.addedTagName) && !this.tags) {
+          this.tags = [];
+          const tagNames = this.tagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
+          const addedTagNames = !this.addedTagName ? [] :
+                  this.addedTagName.split(",").map(tag => tag.toString().trim()).filter(tag => !!tag);
+
+          tagNames.forEach(tagName => this.tags.push({name: tagName, path: this.path}));
+          addedTagNames.forEach(tagName => this.tags.push({name: tagName, isAdded:true, path: this.path}));
+        }
+
+
+        if (Array.isArray(this.tags)) {
+          for (const tag of this.tags)
+            headerList.editableList('addItem', tag);
+        }
+      },
+
+      oneditsave: function() {
+        const tagRowEls = $("#node-input-headers-container").editableList('items');
+        this.tags = [];
+
+        const tags = this.tags;
+        tagRowEls.each(function(i) {
+          const tagRowEl = $(this);
+          const tagPath = tagRowEl.find(".node-input-header-name").val();
+          const isAdded = tagRowEl.find(".node-input-header-check").is(':checked');
+          const tagName = tagRowEl.find(".node-input-header-value").val();
+
+          if (!tagName) return;
+          tags.push({
+            name: tagName,
+            isAdded,
+            path: tagPath ? tagPath : "[root]",
+          });
+        });
+
+        if (this.tags.length && (this.tagName || this.addedTagName)) {
+          delete this.tagName;
+          delete this.addedTagName;
         }
       }
     });

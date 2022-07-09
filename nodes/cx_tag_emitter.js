@@ -69,7 +69,7 @@ class TagStorage {
         }
         return out;
     }
-    getNameValueObjectFr0mTagConfigs(tagConfigsList) {
+    getNameValueObjectFromTagConfigs(tagConfigsList) {
         const out = {};
         for (const tagConf of tagConfigsList) {
             const storage = this.storage[tagConf.path || ""];
@@ -230,9 +230,9 @@ module.exports = function (RED) {
         }
         node.status({ fill: "grey", shape: "ring" });
         node.on("input", emitCurrentTags);
-        const parentPath = config.path;
         let isError = false;
         if (config.isToEmitAllChanges) {
+            const parentPath = config.path;
             eventEmitter.on(parentPath + "/" + ALL_CHANGES_CHANNEL, handleAnyTagChange);
             if (config.emitOnStart)
                 RED.events.on("flows:started", emitOnStart);
@@ -281,6 +281,7 @@ module.exports = function (RED) {
         }
         function emitCurrentTags() {
             if (config.isToEmitAllChanges) {
+                const parentPath = config.path;
                 const currentTags = tagStorage.getStorage(parentPath);
                 if (!currentTags) {
                     handleError("No storage");
@@ -295,28 +296,33 @@ module.exports = function (RED) {
             }
         }
         function handleSomeTagChanges(tagConf) {
-            const tag = tagStorage.getTag(tagConf.name, parentPath);
+            const tagPath = tagConf.path || "";
+            const tag = tagStorage.getTag(tagConf.name, tagPath);
             if (!tag)
                 return;
-            const tagPath = tagConf.path || "";
             if (isOnlyOneTagToEmit) {
                 const valueStr = tag.value == null ? "" : tag.value.toString();
                 node.status({ text: valueStr, fill: "grey", shape: "dot" });
-                node.send(buildMessage(tagConf.name, tag.value, tagPath, { prevValue: tag.prevValue }));
+                const additionalProps = { prevValue: tag.prevValue };
+                if (tag.props)
+                    additionalProps.props = tag.props;
+                node.send(buildMessage(tagConf.name, tag.value, tagPath, additionalProps));
                 return;
             }
             batchQty++;
             if (batchQty > 1)
                 return;
             setTimeout(() => {
-                const batchObject = tagStorage.getNameValueObjectFr0mTagConfigs(tagConfigs);
-                node.send(buildMessage("__some", batchObject, tagPath));
-                const text = tagConfigs.length === 1 ? batchObject[tagConfigs[0].name] : batchQty + " change(s)";
-                node.status({ text, fill: "grey", shape: "dot" });
+                const payload = config.isGrouped ?
+                    groupByPath(tagConfigs, tagStorage) :
+                    tagStorage.getNameValueObjectFromTagConfigs(tagConfigs);
+                node.send(buildMessage("__some", payload));
+                node.status({ text: batchQty + " change(s)", fill: "grey", shape: "dot" });
                 batchQty = 0;
             }, 0);
         }
         function handleAnyTagChange(idListOfChangedTagValues) {
+            const parentPath = config.path;
             const payload = tagStorage.getNameValueObject(idListOfChangedTagValues, parentPath);
             if (!Object.keys(payload).length)
                 return handleError("Nothing to emit");
@@ -339,6 +345,19 @@ module.exports = function (RED) {
                 node.status("");
             }
         }
+    }
+    function groupByPath(tagConfigs, tagStorage) {
+        const payload = {};
+        for (const tagConfig of tagConfigs) {
+            const path = tagConfig.path || ROOT_STORAGE_PATH;
+            const tag = tagStorage.getTag(tagConfig.name, path);
+            if (!tag)
+                continue;
+            if (!payload[path])
+                payload[path] = {};
+            payload[path][tag.name] = tag.value;
+        }
+        return payload;
     }
     function TagsIn(config) {
         RED.nodes.createNode(this, config);
@@ -416,6 +435,8 @@ module.exports = function (RED) {
                         tag.desc = tagDef.desc;
                     if (tagDef.db && typeof tagDef.db === "number")
                         tag.db = tagDef.db;
+                    if (tagDef.props && typeof tagDef.props === "object")
+                        tag.props = tagDef.props;
                 }
                 const tagDefQty = Object.keys(msg.payload).length;
                 node.status({ text: `${tagDefQty} properties set`, fill: "green", shape: "dot" });

@@ -109,12 +109,21 @@ toMetrics: true
   <pre style="overflow-x: scroll; white-space: pre;">
 setProperties: true // it triggers to add properties to the tags
 payload: {
-  tagName: {            // all properties ar optional
+  tagName: {            // all properties are optional
     desc?: string,
-    value?: tag value,  // set this value DOES NOT trigger the change
+    value?: tag value,  // setting this DOES NOT trigger tag emitter
     db?: number         // if the value is number
+    props?: {            // custom data and properties
+      key: value
+    }
   }
 }
+  </pre>
+  <p>To access tags from standard Function node use:</p>
+  <pre>
+RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
+// path and storageName are optional.
+// default path (root) and storage will be used.
   </pre>
 </script>
 
@@ -132,10 +141,6 @@ payload: {
     <input type="text" id="node-input-storage">
   </div>
   <div class="form-row">
-    <label for="node-input-path"><i class="fa fa-sitemap"></i> Path</label>
-    <select id="node-input-path" style="width: 70%"></select>
-  </div>
-  <div class="form-row">
     <label for="node-input-isToEmitAllChanges"></label>
     <input type="checkbox" id="node-input-isToEmitAllChanges" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
     <span>Emit All Changes</span>
@@ -145,22 +150,32 @@ payload: {
     <input type="checkbox" id="node-input-emitOnStart" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
     <span>Emit On Start</span>
   </div>
+  <div id="node-input-section2">
+    <div class="form-row">
+      <label for="node-input-path"><i class="fa fa-sitemap"></i> Path</label>
+      <select id="node-input-path" style="width: 70%"></select>
+    </div>
+  </div>
   <div id="node-input-section1">
-
+    <div class="form-row">
+      <label for="node-input-isGrouped"></label>
+      <input type="checkbox" id="node-input-isGrouped" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
+      <span>Group Payload By Path</span>
+    </div>
     <div class="form-row" style="margin-bottom:0;">
       <label style="width: auto;"><i class="fa fa-list"></i> Tag List: path, prevent emit on change, tag name </label>
     </div>
     <div class="form-row node-input-headers-container-row">
       <ol id="node-input-headers-container"></ol>
     </div>
-    <div class="form-row">
-      <label for="node-input-refreshValues">Refresh Tags</label>
-      <input type="checkbox" id="node-input-refreshValues" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
-      <label id="node-input-refreshValuesLabel"></label>
-    </div>
-    <div class="form-row">
-      <code style="display: block; white-space: pre; height: 300px" id="node-input-tag-name-list"></code>
-    </div>
+  </div>
+  <div class="form-row">
+    <label for="node-input-refreshValues">Refresh Tags</label>
+    <input type="checkbox" id="node-input-refreshValues" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
+    <label id="node-input-refreshValuesLabel"></label>
+  </div>
+  <div class="form-row">
+    <code style="display: block; white-space: pre; height: 300px" id="node-input-tag-name-list"></code>
   </div>
 </script>
 
@@ -172,12 +187,15 @@ payload: {
     topic: tagName as `string`
     payload: tagValue as `any`
     prevValue: tag previous value as `any`
+    path: tag namespace as `string`
+    storage: storage location
+    props: object with custom data set via Tag_In > setProperties
 }
   </pre>
   <p>Out as the batch</p>
   <pre>
 {
-    topic: "__batch",
+    topic: "__some",
     payload: {
         [tagName: string]: tagValue
     }
@@ -186,7 +204,7 @@ payload: {
   <p>All changes, same message structure even if one change</p>
   <pre>
 {
-    topic: "__batch_all",
+    topic: "__all",
     payload: {
         [tagName: string]: tagValue
     }
@@ -427,7 +445,8 @@ payload: {
         tagName: {value: ""},
         addedTagName: {value: ""},
         emitOnStart: {value: true},
-        tags: {value: []}
+        tags: {value: []},
+        isGrouped: {value: false},
       },
       inputs: 0,
       outputs: 1,
@@ -474,6 +493,8 @@ payload: {
       oneditprepare: function () {
         let paths = [];
         const sectionEl = $('#node-input-section1');
+        const pathSectionEl = $('#node-input-section2');
+
         const isToEmitAllChangesEl = $('#node-input-isToEmitAllChanges');
         const refreshValuesEl = $('#node-input-refreshValues');
         const refreshValuesLabelEl = $('#node-input-refreshValuesLabel');
@@ -489,11 +510,13 @@ payload: {
 
 
         function checkBatchStatus() {
-          if (isToEmitAllChangesEl.is(':checked'))
+          if (isToEmitAllChangesEl.is(':checked')) {
             sectionEl.hide();
-          else {
-            sectionEl.show();
+            pathSectionEl.show();
             getVariableValues();
+          } else {
+            sectionEl.show();
+            pathSectionEl.hide();
           }
         }
 
@@ -524,13 +547,14 @@ payload: {
           const storageConfigNode = RED.nodes.node(storageNodeId);
 
           const parentPath = (tagPath && typeof tagPath === "string") ? tagPath : pathSelectEl.val();
-          if (!storageConfigNode || !parentPath || isToEmitAllChangesEl.is(':checked')) return;
+          if (!storageConfigNode || !parentPath) return;
 
           const varNameListEl = $("#node-input-tag-name-list");
           refreshValuesLabelEl.text("Loading tags...");
 
           refreshValuesEl.prop("disabled", true);
-          const url = `__cx_tag_emitter/get_variables?config_node_id=${storageNodeId}&parent_path=${parentPath}`
+          const url = `__cx_tag_emitter/get_variables?config_node_id=${storageNodeId}&parent_path=${parentPath}`;
+
           $.getJSON(url, function(data) {
             refreshValuesEl.prop("disabled", false);
             refreshValuesLabelEl.text("");
@@ -538,7 +562,7 @@ payload: {
             // tagNames: string[], values: {[tagName: string]: any}, descriptions: {[tagName: string]: string}
             const [tagNames, values, descriptions] = data || [];
             if (!tagNames || !tagNames.length)
-              return varNameListEl.text("No tags here :( Try another path.");
+              return varNameListEl.text("No tags at " + parentPath);
 
             let out = "Tags at " + parentPath + ":\n";
             for (const tagName of tagNames) {
@@ -563,6 +587,7 @@ payload: {
               whiteSpace: 'nowrap',
               display: 'flex'
             }).appendTo(container);
+
             const tagPathCell = $('<div/>').css({'flex-grow':1}).appendTo(row);
             const tagPathEl = $('<input/>', {
               class:"node-input-header-name", type:"text", style:"width: 100%",
@@ -579,11 +604,26 @@ payload: {
             }).attr("placeholder", "e.g. tag1")
               .appendTo(propertyValueCell);
 
+            tagPathEl.focus(() => getVariableValues(tagPathEl.val()));
+            tagNameEl.focus(() => getVariableValues(tagPathEl.val()));
 
             tagPathEl.autoComplete({
               search: function(val) {
                 const matches = [];
                 paths.forEach(v => {
+                  let i = v.toLowerCase().indexOf(val.toLowerCase());
+                  if (i > -1)
+                    matches.push({value: v, label: v, i});
+                });
+                matches.sort(function(A,B){return A.i-B.i})
+                return matches
+              }
+            })
+
+            tagNameEl.autoComplete({
+              search: function(val) {
+                const matches = [];
+                varNames.forEach(v => {
                   let i = v.toLowerCase().indexOf(val.toLowerCase());
                   if (i > -1)
                     matches.push({value: v, label: v, i});

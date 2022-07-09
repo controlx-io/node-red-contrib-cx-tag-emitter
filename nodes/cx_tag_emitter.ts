@@ -1,6 +1,5 @@
 import {Node, NodeAPI, NodeDef} from "node-red";
 import {EventEmitter} from "events";
-import {NodeStatusFill} from "@node-red/registry";
 
 interface ITagInNodeConfig extends NodeDef {
     storage: string, // storage config node ID
@@ -20,6 +19,7 @@ interface ITagEmitConfig {
 }
 
 interface IValueEmitterConfig extends NodeDef {
+    isGrouped?: boolean;
     tags?: ITagEmitConfig[];
     storage: string, // storage config node ID
     path: string;
@@ -46,6 +46,10 @@ interface ITagStoragePath {
 
 interface ITagNameValueObject {
     [tagName: string]: any
+}
+
+interface GroupedByPathPayload {
+    [path: string]: ITagNameValueObject
 }
 
 
@@ -130,7 +134,7 @@ class TagStorage {
         return out
     }
 
-    getNameValueObjectFr0mTagConfigs(tagConfigsList: ITagEmitConfig[]): ITagNameValueObject {
+    getNameValueObjectFromTagConfigs(tagConfigsList: ITagEmitConfig[]): ITagNameValueObject {
         const out: ITagNameValueObject = {};
         for (const tagConf of tagConfigsList) {
             const storage = this.storage[tagConf.path || ""];
@@ -341,13 +345,14 @@ module.exports = function(RED: NodeAPI) {
 
         node.status({fill: "grey", shape: "ring"});
         node.on("input", emitCurrentTags);
-        const parentPath = config.path;
+
         let isError = false;
 
         if (config.isToEmitAllChanges) {
             //
             // ============= This is if ALL tag changes emitted ==============
             //
+            const parentPath = config.path;
             eventEmitter.on(parentPath + "/" + ALL_CHANGES_CHANNEL, handleAnyTagChange);
             if (config.emitOnStart)
                 RED.events.on("flows:started", emitOnStart)
@@ -422,6 +427,7 @@ module.exports = function(RED: NodeAPI) {
 
         function emitCurrentTags() {
             if (config.isToEmitAllChanges) {
+                const parentPath = config.path;
                 const currentTags = tagStorage.getStorage(parentPath);
                 if (!currentTags) {
                     handleError("No storage");
@@ -438,15 +444,17 @@ module.exports = function(RED: NodeAPI) {
 
         // FROM: eventEmitter.emit(path + "/" + changedTag, changedTag);
         function handleSomeTagChanges(tagConf: ITagEmitConfig) {
-            const tag = tagStorage.getTag(tagConf.name, parentPath);
-            if (!tag) return;
-
             const tagPath = tagConf.path || "";
+            const tag = tagStorage.getTag(tagConf.name, tagPath);
+            if (!tag) return;
 
             if (isOnlyOneTagToEmit) {
                 const valueStr = tag.value == null ? "" : tag.value.toString();
                 node.status({text: valueStr, fill: "grey", shape: "dot" });
-                node.send(buildMessage(tagConf.name, tag.value, tagPath,{prevValue: tag.prevValue}))
+
+                const additionalProps: any = {prevValue: tag.prevValue};
+                if (tag.props) additionalProps.props = tag.props;
+                node.send(buildMessage(tagConf.name, tag.value, tagPath, additionalProps))
                 return;
             }
 
@@ -459,16 +467,20 @@ module.exports = function(RED: NodeAPI) {
 
             // remove batchQty flag in the next JS loop
             setTimeout(() => {
-                const batchObject = tagStorage.getNameValueObjectFr0mTagConfigs(tagConfigs);
-                node.send(buildMessage("__some", batchObject, tagPath))
 
-                const text = tagConfigs.length === 1 ? batchObject[tagConfigs[0].name] : batchQty + " change(s)";
-                node.status({text, fill: "grey", shape: "dot" });
+                const payload = config.isGrouped ?
+                    groupByPath(tagConfigs, tagStorage) :
+                    tagStorage.getNameValueObjectFromTagConfigs(tagConfigs);
+
+                node.send(buildMessage("__some", payload));
+
+                node.status({text: batchQty + " change(s)", fill: "grey", shape: "dot" });
                 batchQty = 0;
             }, 0)
         }
 
         function handleAnyTagChange(idListOfChangedTagValues: string[]) {
+            const parentPath = config.path;
             const payload: {[key: string]: any} = tagStorage.getNameValueObject(idListOfChangedTagValues, parentPath);
 
             if (!Object.keys(payload).length)
@@ -478,7 +490,7 @@ module.exports = function(RED: NodeAPI) {
             node.send(buildMessage("__all", payload, parentPath))
         }
 
-        function buildMessage(topic: string, payload: any, path: string, additionalProps?: {[key: string]: any}) {
+        function buildMessage(topic: string, payload: any, path?: string, additionalProps?: {[key: string]: any}) {
             additionalProps = additionalProps || {};
             return {
                 ...additionalProps,
@@ -502,6 +514,22 @@ module.exports = function(RED: NodeAPI) {
         }
     }
 
+
+    function groupByPath(tagConfigs: ITagEmitConfig[], tagStorage: TagStorage): GroupedByPathPayload {
+        const payload: GroupedByPathPayload = {};
+
+        for (const tagConfig of tagConfigs) {
+            const path = tagConfig.path || ROOT_STORAGE_PATH;
+
+            const tag = tagStorage.getTag(tagConfig.name, path);
+            if (!tag) continue;
+
+            if (!payload[path]) payload[path] = {};
+            payload[path][tag.name] = tag.value;
+        }
+
+        return payload;
+    }
 
 
 
@@ -596,6 +624,7 @@ module.exports = function(RED: NodeAPI) {
                     const tagDef = msg.payload[tagName];
                     if (tagDef.desc && typeof tagDef.desc === "string") tag.desc = tagDef.desc;
                     if (tagDef.db && typeof tagDef.db === "number") tag.db = tagDef.db;
+                    if (tagDef.props && typeof tagDef.props === "object") tag.props = tagDef.props;
                 }
 
                 const tagDefQty = Object.keys(msg.payload).length;

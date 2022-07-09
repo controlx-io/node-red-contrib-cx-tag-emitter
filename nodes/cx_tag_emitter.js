@@ -386,6 +386,25 @@ module.exports = function (RED) {
                 node.status({ text: `${length} tags exported`, fill: "green", shape: "dot" });
                 return node.send({ topic: "toJSON", payload });
             }
+            if (msg.toMetrics === true) {
+                const spBMetrics = {
+                    timestamp: Date.now(),
+                    metrics: []
+                };
+                for (const tagName in currentTags) {
+                    const value = currentTags[tagName].value;
+                    const props = currentTags[tagName].props ? currentTags[tagName].props : {};
+                    const dataType = (props.dataType) ? props.dataType : getSpBDataType(value);
+                    const metric = {
+                        name: tagName,
+                        value, dataType
+                    };
+                    spBMetrics.metrics.push(metric);
+                }
+                const length = spBMetrics.metrics.length;
+                node.status({ text: `${length} metrics sent`, fill: "green", shape: "dot" });
+                return node.send({ topic: "toMetrics", payload: spBMetrics });
+            }
             if (msg.setProperties === true) {
                 if (!isObject(msg.payload))
                     return node.error(".payload must be and an object type, got " +
@@ -528,5 +547,20 @@ function isDifferent(newValue, oldValue) {
 }
 function isObject(obj) {
     return !!obj && obj.constructor.name === "Object";
+}
+function getSpBDataType(value) {
+    switch (typeof value) {
+        case "boolean":
+            return "Boolean";
+        case "number": {
+            if (Number.isInteger(value))
+                return "Int64";
+            else
+                return "Double";
+        }
+        case "string":
+            return "String";
+    }
+    return "Unknown";
 }
 //# sourceMappingURL=cx_tag_emitter.js.map

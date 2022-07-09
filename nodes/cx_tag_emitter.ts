@@ -173,6 +173,7 @@ class Tag {
         return this._name;
     }
 
+    props?: {[key: string]: any};
     desc?: string;
     db?: number; // deadband
     private _value: any = null;
@@ -548,7 +549,7 @@ module.exports = function(RED: NodeAPI) {
             }
 
             if (msg.toJSON === true) {
-                const storageCopy: {[teg: string]: any} = {};
+                const storageCopy: {[tag: string]: any} = {};
                 for (const tagName in currentTags) {
                     storageCopy[tagName] = {};
                     storageCopy[tagName].desc = currentTags[tagName].desc || "";
@@ -561,6 +562,28 @@ module.exports = function(RED: NodeAPI) {
 
                 node.status({text:`${length} tags exported`, fill: "green", shape: "dot" });
                 return node.send({topic: "toJSON", payload})
+            }
+
+            if (msg.toMetrics === true) {
+                const spBMetrics: {[key: string]: any} = {
+                    timestamp: Date.now(),
+                    metrics: []
+                };
+                for (const tagName in currentTags) {
+                    const value = currentTags[tagName].value;
+                    const props: any = currentTags[tagName].props ? currentTags[tagName].props : {};
+                    const dataType = (props.dataType) ? props.dataType : getSpBDataType(value);
+                    const metric = {
+                        name: tagName,
+                        value, dataType
+                    };
+                    spBMetrics.metrics.push(metric);
+                }
+
+                const length = spBMetrics.metrics.length;
+
+                node.status({text:`${length} metrics sent`, fill: "green", shape: "dot" });
+                return node.send({topic: "toMetrics", payload: spBMetrics})
             }
 
             if (msg.setProperties === true) {
@@ -747,4 +770,18 @@ function isDifferent(newValue: any, oldValue: any): boolean {
 function isObject(obj: any): boolean {
     // OLD way: return !(obj == null || Array.isArray(obj) || typeof obj !== "object")
     return !!obj && obj.constructor.name === "Object";
+}
+
+function getSpBDataType(value: any): string {
+    switch (typeof value) {
+        case "boolean":
+            return "Boolean";
+        case "number": {
+            if (Number.isInteger(value)) return "Int64";
+            else return "Double";
+        }
+        case "string":
+            return "String";
+    }
+    return "Unknown"
 }

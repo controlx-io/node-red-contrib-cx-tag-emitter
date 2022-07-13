@@ -735,6 +735,7 @@ module.exports = function(RED: NodeAPI) {
                 if (tag.sourceNodeId && tag.sourceNodeId !== node.id) {
                     node.warn(`Tag ${tagId} changed by two different sources. ` +
                         `From ${tag.sourceNodeId} to ${node.id}`);
+                    tag.sourceNodeId = node.id;
                 }
 
                 // check if out of the deadband, if not return

@@ -518,6 +518,7 @@ module.exports = function (RED) {
                 if (tag.sourceNodeId && tag.sourceNodeId !== node.id) {
                     node.warn(`Tag ${tagId} changed by two different sources. ` +
                         `From ${tag.sourceNodeId} to ${node.id}`);
+                    tag.sourceNodeId = node.id;
                 }
                 if (tag.db && typeof newValue === "number" && typeof currentValue === "number") {
                     const diff = Math.abs(newValue - currentValue);

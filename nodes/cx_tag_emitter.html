@@ -143,7 +143,7 @@ RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
   <div class="form-row">
     <label for="node-input-isToEmitAllChanges"></label>
     <input type="checkbox" id="node-input-isToEmitAllChanges" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
-    <span>Emit All Changes</span>
+    <span>Emit All Changes in Path</span>
   </div>
   <div class="form-row">
     <label for="node-input-emitOnStart"></label>
@@ -352,10 +352,10 @@ RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
       icon: "link-out.png",
       paletteLabel: "Tags In",
       label: function() {
-        return this.name || (
-                this.isBatch ?
-                        "Batch In" :
-                        ((this.tagName || "Tag In") + (this.deadband == 0 ? "" : " ±" + this.deadband)));
+        if (this.name) return this.name;
+        if (this.isBatch) return "Batch to " + this.path;
+
+        return this.path + ": " + (this.tagName || "Tag In") + (this.deadband == 0 ? "" : " ±" + this.deadband)
       },
       oneditprepare: function() {
 

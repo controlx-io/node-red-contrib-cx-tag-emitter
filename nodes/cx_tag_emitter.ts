@@ -634,7 +634,9 @@ module.exports = function(RED: NodeAPI) {
                         (msg.payload ? typeof msg.payload : "'null'"));
 
                 for (const tagName in msg.payload) {
-                    const tag = addTagIfNotExist(tagName, parentPath);
+                    const path = msg.payload[tagName] && msg.payload[tagName].path ?
+                        msg.payload[tagName].path : parentPath;
+                    const tag = addTagIfNotExist(tagName, path);
                     const tagDef = msg.payload[tagName];
                     if (tagDef.desc && typeof tagDef.desc === "string") tag.desc = tagDef.desc;
                     if (tagDef.db && typeof tagDef.db === "number") tag.db = tagDef.db;

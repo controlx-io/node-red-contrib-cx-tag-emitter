@@ -39,7 +39,7 @@
     <input type="text" id="node-input-storage">
   </div>
   <div class="form-row">
-    <label for="node-input-path"><i class="fa  fa-sitemap"></i> New path </label>
+    <label for="node-input-path"><i class="fa  fa-sitemap"></i> Path</label>
     <input type="text" id="node-input-path" placeholder="area1/machine1">
   </div>
   <div class="form-row">
@@ -112,8 +112,9 @@ payload: {
   tagName: {            // all properties are optional
     desc?: string,
     value?: tag value,  // setting this DOES NOT trigger tag emitter
-    db?: number         // if the value is number
-    props?: {            // custom data and properties
+    db?: number,        // if the value is number
+    path?: string,      // tag path. If this not specified using node path.
+    props?: {           // custom data and properties
       key: value
     }
   }

@@ -406,7 +406,9 @@ module.exports = function (RED) {
                     return node.error(".payload must be and an object type, got " +
                         (msg.payload ? typeof msg.payload : "'null'"));
                 for (const tagName in msg.payload) {
-                    const tag = addTagIfNotExist(tagName, parentPath);
+                    const path = msg.payload[tagName] && msg.payload[tagName].path ?
+                        msg.payload[tagName].path : parentPath;
+                    const tag = addTagIfNotExist(tagName, path);
                     const tagDef = msg.payload[tagName];
                     if (tagDef.desc && typeof tagDef.desc === "string")
                         tag.desc = tagDef.desc;

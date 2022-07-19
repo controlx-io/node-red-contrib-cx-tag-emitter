@@ -92,29 +92,6 @@ class TagStorage {
         }
     }
 }
-class Tag {
-    constructor(_name, sourceNodeId) {
-        this._name = _name;
-        this.sourceNodeId = sourceNodeId;
-        this._value = null;
-        this._prevValue = null;
-        if (!_name)
-            this._name = "unnamed";
-    }
-    get prevValue() {
-        return this._prevValue;
-    }
-    get value() {
-        return this._value;
-    }
-    set value(value) {
-        this._prevValue = this._value;
-        this._value = value;
-    }
-    get name() {
-        return this._name;
-    }
-}
 const isDebug = !!process.env["TAG_EMITTER_NODE"];
 module.exports = function (RED) {
     const ALL_CHANGES_CHANNEL = "__ALL_CHANGES__";
@@ -503,6 +480,8 @@ module.exports = function (RED) {
             }
             node.send(newMsg);
             for (const changedTag of namesOfChangedTags) {
+                if (changedTag == null)
+                    continue;
                 const tagPath = parentPath + "/" + changedTag;
                 const tagConfig = { path: parentPath, name: changedTag };
                 eventEmitter.emit(tagPath, tagConfig);
@@ -526,13 +505,15 @@ module.exports = function (RED) {
                         return;
                     }
                 }
+                tag.prevValue = tag.value;
                 tag.value = newValue;
                 return tag;
             }
         }
         function addTagIfNotExist(tagId, path) {
             const tagFromStore = tagStorage.getTag(tagId, path);
-            const tag = tagFromStore ? tagFromStore : new Tag(tagId, node.id);
+            const tag = tagFromStore ||
+                { name: tagId, sourceNodeId: node.id, value: null, prevValue: null };
             if (!tagFromStore)
                 tagStorage.setTag(tag, path);
             return tag;

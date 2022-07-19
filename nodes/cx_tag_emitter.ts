@@ -158,35 +158,49 @@ class TagStorage {
     }
 }
 
-
-class Tag {
-    get prevValue(): any {
-        return this._prevValue;
-    }
-    get value(): any {
-        return this._value;
-    }
-
-    // saves previous value
-    set value(value: any) {
-        this._prevValue = this._value;
-        this._value = value;
-    }
-
-    get name(): any {
-        return this._name;
-    }
-
+/**
+ * Important: do not use Tag class as it saved to JSON.
+ *   After parsing it from FS context it's losing all their methods.
+ */
+interface Tag {
+    value: any,
+    prevValue: any,
+    name: string,
+    sourceNodeId: string,
     props?: {[key: string]: any};
     desc?: string;
     db?: number; // deadband
-    private _value: any = null;
-    private _prevValue: any = null;
-
-    constructor(private readonly _name: string, public sourceNodeId: string) {
-        if (!_name) this._name = "unnamed";
-    }
 }
+
+
+// class Tag {
+//     get prevValue(): any {
+//         return this._prevValue;
+//     }
+//     get value(): any {
+//         return this._value;
+//     }
+//
+//     // saves previous value
+//     set value(value: any) {
+//         this._prevValue = this._value;
+//         this._value = value;
+//     }
+//
+//     get name(): any {
+//         return this._name;
+//     }
+//
+//     props?: {[key: string]: any};
+//     desc?: string;
+//     db?: number; // deadband
+//     private _value: any = null;
+//     private _prevValue: any = null;
+//
+//     constructor(private readonly _name: string, public sourceNodeId: string) {
+//         if (!_name) this._name = "unnamed";
+//     }
+// }
 
 
 
@@ -714,6 +728,8 @@ module.exports = function(RED: NodeAPI) {
 
 
             for (const changedTag of namesOfChangedTags) {
+                if (changedTag == null) continue;
+
                 const tagPath = parentPath + "/" + changedTag;
                 const tagConfig: ITagEmitConfig = {path: parentPath, name: changedTag};
                 // function handleSomeTagChanges(tagName: string)
@@ -749,6 +765,7 @@ module.exports = function(RED: NodeAPI) {
 
 
                 // save new and previous value to the Tag Instance
+                tag.prevValue = tag.value;
                 tag.value = newValue;
                 return tag
             }
@@ -757,7 +774,8 @@ module.exports = function(RED: NodeAPI) {
 
         function addTagIfNotExist(tagId: string, path: string): Tag {
             const tagFromStore = tagStorage.getTag(tagId, path);
-            const tag = tagFromStore ? tagFromStore : new Tag(tagId, node.id);
+            const tag = tagFromStore ||
+                { name: tagId, sourceNodeId: node.id, value: null, prevValue: null };
 
             if (!tagFromStore) tagStorage.setTag(tag, path);
             return tag

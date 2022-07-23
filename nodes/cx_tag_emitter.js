@@ -5,6 +5,7 @@ const TAGS_STORAGE = "_TAGS_";
 const ROOT_STORAGE_PATH = "[root]";
 class TagStorage {
     constructor(node, storeName) {
+        this.node = node;
         this.storeName = storeName;
         this.storage = {
             [ROOT_STORAGE_PATH]: {}
@@ -35,6 +36,10 @@ class TagStorage {
             .get(TAGS_STORAGE, _storeName);
         return storage || {};
     }
+    setContext() {
+        const _storeName = this.storeName === "default" ? undefined : this.storeName;
+        this.node.context().global.set(TAGS_STORAGE, this.storage, _storeName);
+    }
     setStorage(path) {
         if (!this.storage[path])
             this.storage[path] = {};
@@ -53,6 +58,7 @@ class TagStorage {
     setTag(tag, path) {
         path = path || ROOT_STORAGE_PATH;
         this.storage[path][tag.name] = tag;
+        this.setContext();
         return tag;
     }
     getNameValueObject(tagIdList, path) {
@@ -177,6 +183,8 @@ module.exports = function (RED) {
         RED.nodes.createNode(this, config);
         const node = this;
         node.tagStorage = new TagStorage(node, config.storeName);
+        const intervalId = setInterval(() => { var _a; return (_a = node.tagStorage) === null || _a === void 0 ? void 0 : _a.setContext(); }, 1000);
+        node.on("close", () => clearInterval(intervalId));
         if (RED.util.cxGetTag)
             return;
         RED.util.cxGetTag = function (tagName, path, storageName) {

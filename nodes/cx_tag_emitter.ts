@@ -80,7 +80,7 @@ class TagStorage {
         return storage || {}
     }
 
-    constructor(node: Node, private readonly storeName?: string) {
+    constructor(private node: Node, private readonly storeName?: string) {
         const _storeName = this.storeName === "default" ? undefined : this.storeName;
         const storage = node
             .context()
@@ -95,6 +95,11 @@ class TagStorage {
                 .global
                 .set(TAGS_STORAGE, this.storage, _storeName)
         }
+    }
+
+    setContext() {
+        const _storeName = this.storeName === "default" ? undefined : this.storeName;
+        this.node.context().global.set(TAGS_STORAGE, this.storage, _storeName);
     }
 
     setStorage(path: string): ITagStorage {
@@ -117,6 +122,7 @@ class TagStorage {
     setTag(tag: Tag, path: string): Tag {
         path = path || ROOT_STORAGE_PATH;
         this.storage[path][tag.name] = tag;
+        this.setContext();
         return tag;
     }
 
@@ -310,7 +316,9 @@ module.exports = function(RED: NodeAPI) {
         const node: IStorageManagerNode = this;
 
         node.tagStorage = new TagStorage(node, config.storeName);
+        const intervalId = setInterval(() => node.tagStorage?.setContext(), 1000);
 
+        node.on("close", () => clearInterval(intervalId));
 
         // below is to attach custom function to the RED body
         // the function is getting reference of the tag. This can help get tags in Node RED functions

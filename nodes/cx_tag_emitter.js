@@ -457,7 +457,7 @@ module.exports = function (RED) {
                 if (msg.payload == null)
                     return;
                 const newValue = msg.payload;
-                const changedTag = setNewTagValueIfChanged(tagName, newValue, parentPath);
+                const changedTag = setNewTagValueIfChanged(tagName, newValue, parentPath, config.isForcedEmit);
                 if (!changedTag)
                     return;
                 namesOfChangedTags.push(changedTag.name);
@@ -498,7 +498,7 @@ module.exports = function (RED) {
             }
             eventEmitter.emit(parentPath + "/" + ALL_CHANGES_CHANNEL, namesOfChangedTags);
         });
-        function setNewTagValueIfChanged(tagId, newValue, path) {
+        function setNewTagValueIfChanged(tagId, newValue, path, isForcedEmit) {
             if (typeof newValue === "function")
                 return;
             const tag = addTagIfNotExist(tagId, path);
@@ -517,6 +517,9 @@ module.exports = function (RED) {
                 }
                 tag.prevValue = tag.value;
                 tag.value = newValue;
+                return tag;
+            }
+            else if (isForcedEmit) {
                 return tag;
             }
         }

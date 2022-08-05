@@ -63,6 +63,14 @@
       <span>Deadband will be applied to the "number" tag type ONLY.</span>
       <span>The tag data type is recognised automatically.</span>
     </div>
+    <br>
+    <div class="form-row">
+      <label for="node-input-isForcedEmit">Force Emit</label>
+      <input type="checkbox" id="node-input-isForcedEmit" style="display:inline-block; width:auto; vertical-align:baseline; margin-left:8px; margin-right:4px;">
+    </div>
+    <div class="form-tips">
+      <span>Emits even if the value's not changed.</span>
+    </div>
   </div>
 </script>
 
@@ -347,6 +355,7 @@ RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
         tagName: {value: "", required: true},
         desc: {value: ""},
         deadband: {value: "", validate:RED.validators.number(true)},
+        isForcedEmit: {value: false},
       },
       inputs: 1,
       outputs: 1,

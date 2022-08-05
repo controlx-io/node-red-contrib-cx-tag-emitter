@@ -2,6 +2,7 @@ import {Node, NodeAPI, NodeDef} from "node-red";
 import {EventEmitter} from "events";
 
 interface ITagInNodeConfig extends NodeDef {
+    isForcedEmit?: boolean;
     storage: string, // storage config node ID
     path: string;
     name: string,
@@ -696,7 +697,7 @@ module.exports = function(RED: NodeAPI) {
 
                 // prepare the tag
                 const newValue = msg.payload;
-                const changedTag = setNewTagValueIfChanged(tagName, newValue, parentPath);
+                const changedTag = setNewTagValueIfChanged(tagName, newValue, parentPath, config.isForcedEmit);
                 if (!changedTag) return;
 
                 namesOfChangedTags.push(changedTag.name);
@@ -751,7 +752,7 @@ module.exports = function(RED: NodeAPI) {
 
 
         // returns Tag if changed
-        function setNewTagValueIfChanged(tagId: string, newValue: any, path: string): Tag | undefined {
+        function setNewTagValueIfChanged(tagId: string, newValue: any, path: string, isForcedEmit?: boolean): Tag | undefined {
             if (typeof newValue === "function") return;
 
             const tag = addTagIfNotExist(tagId, path);
@@ -777,6 +778,8 @@ module.exports = function(RED: NodeAPI) {
                 // save new and previous value to the Tag Instance
                 tag.prevValue = tag.value;
                 tag.value = newValue;
+                return tag
+            } else if (isForcedEmit) {
                 return tag
             }
         }

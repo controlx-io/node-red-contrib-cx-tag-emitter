@@ -504,11 +504,6 @@ module.exports = function (RED) {
             const tag = addTagIfNotExist(tagId, path);
             const currentValue = tag.value;
             if (isDifferent(newValue, currentValue)) {
-                if (tag.sourceNodeId && tag.sourceNodeId !== node.id) {
-                    node.warn(`Tag ${tagId} changed by two different sources. ` +
-                        `From ${tag.sourceNodeId} to ${node.id}`);
-                    tag.sourceNodeId = node.id;
-                }
                 if (tag.db && typeof newValue === "number" && typeof currentValue === "number") {
                     const diff = Math.abs(newValue - currentValue);
                     if (diff < tag.db) {
@@ -516,7 +511,9 @@ module.exports = function (RED) {
                     }
                 }
                 tag.prevValue = tag.value;
+                tag.prevTs = tag.ts;
                 tag.value = newValue;
+                tag.ts = Date.now();
                 return tag;
             }
             else if (isForcedEmit) {
@@ -525,8 +522,15 @@ module.exports = function (RED) {
         }
         function addTagIfNotExist(tagId, path) {
             const tagFromStore = tagStorage.getTag(tagId, path);
+            const now = Date.now();
             const tag = tagFromStore ||
-                { name: tagId, sourceNodeId: node.id, value: null, prevValue: null };
+                {
+                    name: tagId,
+                    value: null,
+                    prevValue: null,
+                    ts: now,
+                    prevTs: undefined,
+                };
             if (!tagFromStore)
                 tagStorage.setTag(tag, path);
             return tag;

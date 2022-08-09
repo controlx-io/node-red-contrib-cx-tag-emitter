@@ -170,13 +170,15 @@ class TagStorage {
  *   After parsing it from FS context it's losing all their methods.
  */
 interface Tag {
+    prevTs?: number;
     value: any,
     prevValue: any,
     name: string,
-    sourceNodeId: string,
+    // sourceNodeId: string,
     props?: {[key: string]: any};
     desc?: string;
     db?: number; // deadband
+    ts: number
 }
 
 
@@ -759,11 +761,11 @@ module.exports = function(RED: NodeAPI) {
 
             const currentValue = tag.value;
             if (isDifferent(newValue, currentValue)) {
-                if (tag.sourceNodeId && tag.sourceNodeId !== node.id) {
-                    node.warn(`Tag ${tagId} changed by two different sources. ` +
-                        `From ${tag.sourceNodeId} to ${node.id}`);
-                    tag.sourceNodeId = node.id;
-                }
+                // if (tag.sourceNodeId && tag.sourceNodeId !== node.id) {
+                //     node.warn(`Tag ${tagId} changed by two different sources. ` +
+                //         `From ${tag.sourceNodeId} to ${node.id}`);
+                //     tag.sourceNodeId = node.id;
+                // }
 
                 // check if out of the deadband, if not return
                 if (tag.db && typeof newValue === "number" && typeof currentValue === "number") {
@@ -777,7 +779,9 @@ module.exports = function(RED: NodeAPI) {
 
                 // save new and previous value to the Tag Instance
                 tag.prevValue = tag.value;
+                tag.prevTs = tag.ts;
                 tag.value = newValue;
+                tag.ts = Date.now();
                 return tag
             } else if (isForcedEmit) {
                 return tag
@@ -787,8 +791,16 @@ module.exports = function(RED: NodeAPI) {
 
         function addTagIfNotExist(tagId: string, path: string): Tag {
             const tagFromStore = tagStorage.getTag(tagId, path);
+            const now = Date.now();
             const tag = tagFromStore ||
-                { name: tagId, sourceNodeId: node.id, value: null, prevValue: null };
+                {
+                    name: tagId,
+                    // sourceNodeId: node.id,
+                    value: null,
+                    prevValue: null,
+                    ts: now,
+                    prevTs: undefined,
+                };
 
             if (!tagFromStore) tagStorage.setTag(tag, path);
             return tag

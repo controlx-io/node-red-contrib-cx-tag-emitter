@@ -779,11 +779,13 @@ module.exports = function(RED: NodeAPI) {
 
                 // save new and previous value to the Tag Instance
                 tag.prevValue = tag.value;
-                tag.prevTs = tag.ts;
                 tag.value = newValue;
+                tag.prevTs = tag.ts;
                 tag.ts = Date.now();
                 return tag
             } else if (isForcedEmit) {
+                tag.prevTs = tag.ts;
+                tag.ts = Date.now();
                 return tag
             }
         }

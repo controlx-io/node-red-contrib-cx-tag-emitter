@@ -23,6 +23,8 @@
   "devDependencies": {
     "@types/mocha": "^9.1.1",
     "@types/node-red": "^1.2.0",
+    "@types/node-red-node-test-helper": "^0.2.2",
+    "@types/should": "^13.0.0",
     "mocha": "^10.0.0",
     "node-red": "^3.0.2",
     "node-red-node-test-helper": "^0.3.0",

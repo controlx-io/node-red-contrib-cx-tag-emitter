@@ -99,13 +99,14 @@ class TagStorage {
     }
 }
 const isDebug = !!process.env["TAG_EMITTER_NODE"];
+const isTesting = !!process.env["CX_MOCHA_TESTING"];
 module.exports = function (RED) {
     const ALL_CHANGES_CHANNEL = "__ALL_CHANGES__";
     const eventEmitter = new events_1.EventEmitter();
     let lastCall_ms = 0;
     let at10msCounter = 0;
     let tagListenerCounter = {};
-    const redContextStorage = RED.settings.get("contextStorage");
+    const redContextStorage = isTesting ? {} : RED.settings.get("contextStorage");
     const storages = redContextStorage ? Object.keys(redContextStorage) : [];
     if (!storages.includes("default"))
         storages.unshift("default");

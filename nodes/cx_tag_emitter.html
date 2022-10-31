@@ -386,7 +386,7 @@ RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
         })
 
 
-        pathEl.autoComplete({
+        pathEl.autocomplete({
           search: function(val) {
             const matches = [];
             paths.forEach(v => {
@@ -617,7 +617,7 @@ RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
             tagPathEl.focus(() => getVariableValues(tagPathEl.val()));
             tagNameEl.focus(() => getVariableValues(tagPathEl.val()));
 
-            tagPathEl.autoComplete({
+            tagPathEl.autocomplete({
               search: function(val) {
                 const matches = [];
                 paths.forEach(v => {
@@ -630,7 +630,7 @@ RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
               }
             })
 
-            tagNameEl.autoComplete({
+            tagNameEl.autocomplete({
               search: function(val) {
                 const matches = [];
                 varNames.forEach(v => {

@@ -387,20 +387,8 @@ RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
 
 
         pathEl.autocomplete({
-          search: function(val) {
-            const matches = [];
-            paths.forEach(v => {
-              let i = v.toLowerCase().indexOf(val.toLowerCase());
-              if (i > -1) {
-                matches.push({
-                  value: v,
-                  label: v,
-                  i: i
-                })
-              }
-            });
-            matches.sort(function(A,B){return A.i-B.i})
-            return matches
+          source(request, resolve) {
+            resolve(paths)
           }
         })
 
@@ -618,28 +606,14 @@ RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
             tagNameEl.focus(() => getVariableValues(tagPathEl.val()));
 
             tagPathEl.autocomplete({
-              search: function(val) {
-                const matches = [];
-                paths.forEach(v => {
-                  let i = v.toLowerCase().indexOf(val.toLowerCase());
-                  if (i > -1)
-                    matches.push({value: v, label: v, i});
-                });
-                matches.sort(function(A,B){return A.i-B.i})
-                return matches
+              source(request, resolve) {
+                resolve(paths)
               }
             })
 
             tagNameEl.autocomplete({
-              search: function(val) {
-                const matches = [];
-                varNames.forEach(v => {
-                  let i = v.toLowerCase().indexOf(val.toLowerCase());
-                  if (i > -1)
-                    matches.push({value: v, label: v, i});
-                });
-                matches.sort(function(A,B){return A.i-B.i})
-                return matches
+              source(request, resolve) {
+                resolve(varNames)
               }
             })
 

@@ -4,6 +4,17 @@ const events_1 = require("events");
 const TAGS_STORAGE = "_TAGS_";
 const ROOT_STORAGE_PATH = "[root]";
 class TagStorage {
+    get name() {
+        return this.storeName || "";
+    }
+    static getStoragesByGlobalContext(node, storageName) {
+        const _storeName = storageName === "default" ? undefined : storageName;
+        const storage = node
+            .context()
+            .global
+            .get(TAGS_STORAGE, _storeName);
+        return storage || {};
+    }
     constructor(node, storeName) {
         this.node = node;
         this.storeName = storeName;
@@ -24,17 +35,6 @@ class TagStorage {
                 .global
                 .set(TAGS_STORAGE, this.storage, _storeName);
         }
-    }
-    get name() {
-        return this.storeName || "";
-    }
-    static getStoragesByGlobalContext(node, storageName) {
-        const _storeName = storageName === "default" ? undefined : storageName;
-        const storage = node
-            .context()
-            .global
-            .get(TAGS_STORAGE, _storeName);
-        return storage || {};
     }
     setContext() {
         const _storeName = this.storeName === "default" ? undefined : this.storeName;
@@ -357,6 +357,7 @@ module.exports = function (RED) {
         const parentPath = config.path;
         const tagStorage = configNode.tagStorage;
         node.status({ fill: "grey", shape: "ring" });
+        let isFirstCall = true;
         node.on("input", (msg) => {
             const isTooOften = checkIfTooOften();
             lastCall_ms = Date.now();
@@ -446,7 +447,7 @@ module.exports = function (RED) {
                     if (changedTag)
                         namesOfChangedTags.push(changedTag.name);
                 }
-                if (namesOfChangedTags.length)
+                if (namesOfChangedTags.length || isFirstCall)
                     node.status({ text: namesOfChangedTags.length + " tag(s) in", fill: "grey", shape: "dot" });
             }
             else {
@@ -472,9 +473,10 @@ module.exports = function (RED) {
                     const db = Number.parseFloat(config.deadband);
                     currentTags[tagName].db = isFinite(db) ? db : 0;
                 }
-                if (namesOfChangedTags.length)
+                if (namesOfChangedTags.length || isFirstCall)
                     node.status({ text: newValue.toString(), fill: "grey", shape: "dot" });
             }
+            isFirstCall = false;
             if (!namesOfChangedTags.length)
                 return;
             const newMsg = {};

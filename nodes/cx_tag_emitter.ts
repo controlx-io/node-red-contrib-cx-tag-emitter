@@ -182,37 +182,6 @@ interface Tag {
 }
 
 
-// class Tag {
-//     get prevValue(): any {
-//         return this._prevValue;
-//     }
-//     get value(): any {
-//         return this._value;
-//     }
-//
-//     // saves previous value
-//     set value(value: any) {
-//         this._prevValue = this._value;
-//         this._value = value;
-//     }
-//
-//     get name(): any {
-//         return this._name;
-//     }
-//
-//     props?: {[key: string]: any};
-//     desc?: string;
-//     db?: number; // deadband
-//     private _value: any = null;
-//     private _prevValue: any = null;
-//
-//     constructor(private readonly _name: string, public sourceNodeId: string) {
-//         if (!_name) this._name = "unnamed";
-//     }
-// }
-
-
-
 const isDebug = !!process.env["TAG_EMITTER_NODE"];
 const isTesting = !!process.env["CX_MOCHA_TESTING"];
 
@@ -578,6 +547,7 @@ module.exports = function(RED: NodeAPI) {
         const tagStorage = configNode.tagStorage;
         node.status({fill: "grey", shape: "ring"});
 
+        let isFirstCall = true;
         node.on("input", (msg: any) => {
 
             const isTooOften = checkIfTooOften();
@@ -683,7 +653,7 @@ module.exports = function(RED: NodeAPI) {
                         namesOfChangedTags.push(changedTag.name);
                 }
 
-                if (namesOfChangedTags.length)
+                if (namesOfChangedTags.length || isFirstCall)
                     node.status({text: namesOfChangedTags.length + " tag(s) in", fill: "grey", shape: "dot"});
             } else {
 
@@ -719,9 +689,11 @@ module.exports = function(RED: NodeAPI) {
                     currentTags[tagName].db = isFinite(db) ? db : 0;
                 }
 
-                if (namesOfChangedTags.length)
+                if (namesOfChangedTags.length || isFirstCall)
                     node.status({text: newValue.toString(), fill: "grey", shape: "dot"});
             }
+
+            isFirstCall = false;
 
             if (!namesOfChangedTags.length) return;
 

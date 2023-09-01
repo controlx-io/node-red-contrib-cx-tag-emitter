@@ -671,9 +671,9 @@ module.exports = function(RED: NodeAPI) {
                 // prepare the tag
                 const newValue = msg.payload;
                 const changedTag = setNewTagValueIfChanged(tagName, newValue, parentPath, config.isForcedEmit);
-                if (!changedTag) return;
+                if (!changedTag  && !isFirstCall) return;
 
-                namesOfChangedTags.push(changedTag.name);
+                if (changedTag) namesOfChangedTags.push(changedTag.name);
 
                 // override config description with the incoming message .desc property
                 if (typeof msg.desc === "string")

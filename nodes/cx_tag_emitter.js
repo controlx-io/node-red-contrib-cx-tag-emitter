@@ -460,9 +460,10 @@ module.exports = function (RED) {
                     return;
                 const newValue = msg.payload;
                 const changedTag = setNewTagValueIfChanged(tagName, newValue, parentPath, config.isForcedEmit);
-                if (!changedTag)
+                if (!changedTag && !isFirstCall)
                     return;
-                namesOfChangedTags.push(changedTag.name);
+                if (changedTag)
+                    namesOfChangedTags.push(changedTag.name);
                 if (typeof msg.desc === "string")
                     currentTags[tagName].desc = msg.desc;
                 else if (config.desc)

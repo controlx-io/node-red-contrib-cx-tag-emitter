@@ -287,8 +287,8 @@ module.exports = function (RED) {
             if (!tag)
                 return;
             if (isOnlyOneTagToEmit) {
-                const valueStr = tag.value == null ? "" : tag.value.toString();
-                node.status({ text: valueStr, fill: "grey", shape: "dot" });
+                const text = newValueToString(tag.value);
+                node.status({ text, fill: "grey", shape: "dot" });
                 const additionalProps = { prevValue: tag.prevValue };
                 if (tag.props)
                     additionalProps.props = tag.props;
@@ -474,8 +474,10 @@ module.exports = function (RED) {
                     const db = Number.parseFloat(config.deadband);
                     currentTags[tagName].db = isFinite(db) ? db : 0;
                 }
-                if (namesOfChangedTags.length || isFirstCall)
-                    node.status({ text: newValue.toString(), fill: "grey", shape: "dot" });
+                if (namesOfChangedTags.length || isFirstCall) {
+                    const text = newValueToString(newValue);
+                    node.status({ text, fill: 'grey', shape: 'dot' });
+                }
             }
             isFirstCall = false;
             if (!namesOfChangedTags.length)
@@ -588,5 +590,14 @@ function getSpBDataType(value) {
             return "String";
     }
     return "Unknown";
+}
+function newValueToString(newValue) {
+    if (newValue == null)
+        return '';
+    return typeof newValue === 'object'
+        ? Array.isArray(newValue)
+            ? 'Array: ' + (newValue).length + ' items'
+            : 'Object: ' + Object.keys(newValue).length + ' props'
+        : newValue.toString();
 }
 //# sourceMappingURL=cx_tag_emitter.js.map

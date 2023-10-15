@@ -444,8 +444,8 @@ module.exports = function(RED: NodeAPI) {
             if (!tag) return;
 
             if (isOnlyOneTagToEmit) {
-                const valueStr = tag.value == null ? "" : tag.value.toString();
-                node.status({text: valueStr, fill: "grey", shape: "dot" });
+                const text = newValueToString(tag.value);
+                node.status({text, fill: "grey", shape: "dot" });
 
                 const additionalProps: any = {prevValue: tag.prevValue};
                 if (tag.props) additionalProps.props = tag.props;
@@ -689,8 +689,10 @@ module.exports = function(RED: NodeAPI) {
                     currentTags[tagName].db = isFinite(db) ? db : 0;
                 }
 
-                if (namesOfChangedTags.length || isFirstCall)
-                    node.status({text: newValue.toString(), fill: "grey", shape: "dot"});
+                if (namesOfChangedTags.length || isFirstCall) {
+                    const text = newValueToString(newValue);
+                    node.status({text, fill: 'grey', shape: 'dot'});
+                }
             }
 
             isFirstCall = false;
@@ -832,4 +834,13 @@ function getSpBDataType(value: any): string {
             return "String";
     }
     return "Unknown"
+}
+
+function newValueToString(newValue: any): string {
+    if (newValue == null) return '';
+    return typeof newValue === 'object'
+        ? Array.isArray(newValue)
+            ? 'Array: ' + (newValue).length + ' items'
+            : 'Object: ' + Object.keys(newValue as {}).length + ' props'
+        : newValue.toString();
 }

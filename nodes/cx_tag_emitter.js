@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const events_1 = require("events");
+const MAX_CHARACTERS_IN_TAG_VALUE = 20;
 const TAGS_STORAGE = "_TAGS_";
 const ROOT_STORAGE_PATH = "[root]";
 class TagStorage {
@@ -594,10 +595,18 @@ function getSpBDataType(value) {
 function newValueToString(newValue) {
     if (newValue == null)
         return '';
-    return typeof newValue === 'object'
-        ? Array.isArray(newValue)
-            ? 'Array: ' + (newValue).length + ' items'
-            : 'Object: ' + Object.keys(newValue).length + ' props'
-        : newValue.toString();
+    let valueStr = newValue.toString();
+    if (typeof newValue === 'object') {
+        if (Array.isArray(newValue)) {
+            valueStr = 'Array: ' + (newValue).length + ' items';
+        }
+        else {
+            valueStr = 'Object: ' + Object.keys(newValue).length + ' props';
+        }
+    }
+    if (valueStr.length > MAX_CHARACTERS_IN_TAG_VALUE) {
+        valueStr = valueStr.slice(0, MAX_CHARACTERS_IN_TAG_VALUE) + '...';
+    }
+    return valueStr;
 }
 //# sourceMappingURL=cx_tag_emitter.js.map

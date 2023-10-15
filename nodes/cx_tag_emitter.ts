@@ -1,6 +1,8 @@
 import {Node, NodeAPI, NodeDef} from "node-red";
 import {EventEmitter} from "events";
 
+const MAX_CHARACTERS_IN_TAG_VALUE = 20;
+
 interface ITagInNodeConfig extends NodeDef {
     isForcedEmit?: boolean;
     storage: string, // storage config node ID
@@ -838,9 +840,18 @@ function getSpBDataType(value: any): string {
 
 function newValueToString(newValue: any): string {
     if (newValue == null) return '';
-    return typeof newValue === 'object'
-        ? Array.isArray(newValue)
-            ? 'Array: ' + (newValue).length + ' items'
-            : 'Object: ' + Object.keys(newValue as {}).length + ' props'
-        : newValue.toString();
+    let valueStr = newValue.toString();
+    if (typeof newValue === 'object') {
+        if (Array.isArray(newValue)) {
+            valueStr = 'Array: ' + (newValue).length + ' items';
+        } else {
+            valueStr = 'Object: ' + Object.keys(newValue as {}).length + ' props';
+        }
+    }
+
+    if (valueStr.length > MAX_CHARACTERS_IN_TAG_VALUE) {
+        valueStr = valueStr.slice(0, MAX_CHARACTERS_IN_TAG_VALUE) + '...';
+    }
+
+    return valueStr;
 }

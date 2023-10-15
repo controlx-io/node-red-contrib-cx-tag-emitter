@@ -489,6 +489,8 @@ RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
         }
       },
       oneditprepare: function () {
+        const MAX_CHARACTERS_IN_TAG_VALUE = 30;
+
         let paths = [];
         const sectionEl = $('#node-input-section1');
         const pathSectionEl = $('#node-input-section2');
@@ -567,9 +569,14 @@ RED.util.cxGetTag(tagName: string, path?: string, storageName?: string)
               const value = values[tagName];
               const desc = descriptions[tagName];
 
-              out += tagName + "\t " + (
-                      typeof value === "object" ? JSON.stringify(value) : value
-              ) + (desc ? ("\t\t" + desc) : "") + "\n";
+              let valueString = typeof value === "object" ? JSON.stringify(value) : value;
+
+              // truncate long values in node-input-tag-name-list
+              if (valueString.length > MAX_CHARACTERS_IN_TAG_VALUE) {
+                valueString = valueString.slice(0, MAX_CHARACTERS_IN_TAG_VALUE) + "...";
+              }
+
+              out += tagName + "\t " + valueString + (desc ? ("\t\t" + desc) : "") + "\n";
             }
 
             varNameListEl.text(out);

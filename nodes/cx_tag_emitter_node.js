@@ -30,8 +30,8 @@ module.exports = function CxTagEmitterNode(RED) {
     cx_tag_emitter_1.default.RED = RED;
     const redContextStorage = isTesting ? {} : RED.settings.get('contextStorage');
     const storages = redContextStorage ? Object.keys(redContextStorage) : [];
-    if (!storages.includes('default'))
-        storages.unshift('default');
+    if (!storages.includes(cx_tag_emitter_1.DEFAULT_TAGS_STORAGE))
+        storages.unshift(cx_tag_emitter_1.DEFAULT_TAGS_STORAGE);
     RED.httpAdmin.get('/__cx_tag_emitter/get_storages', (req, res) => {
         res.json(storages).end();
     });

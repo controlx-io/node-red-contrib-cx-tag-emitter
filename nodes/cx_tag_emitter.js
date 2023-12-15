@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TagStorage = exports.TAGS_STORAGE_MODULE = exports.ROOT_STORAGE_PATH = exports.TAGS_STORAGE = void 0;
+exports.TagStorage = exports.DEFAULT_TAGS_STORAGE = exports.ROOT_STORAGE_PATH = exports.TAGS_STORAGE = void 0;
 const events_1 = require("events");
 const MAX_CHARACTERS_IN_TAG_VALUE = 18;
 const ALL_CHANGES_CHANNEL = '__ALL_CHANGES__';
@@ -10,13 +10,18 @@ let at10msCounter = 0;
 const tagListenerCounter = {};
 exports.TAGS_STORAGE = '_TAGS_';
 exports.ROOT_STORAGE_PATH = '[root]';
-exports.TAGS_STORAGE_MODULE = 'default';
+exports.DEFAULT_TAGS_STORAGE = 'default';
 class TagStorage {
+    node;
+    storeName;
+    storage = {
+        [exports.ROOT_STORAGE_PATH]: {},
+    };
     get name() {
         return this.storeName || '';
     }
     static getStoragesByGlobalContext(node, storageName) {
-        const _storeName = storageName === exports.TAGS_STORAGE_MODULE ? undefined : storageName;
+        const _storeName = storageName === exports.DEFAULT_TAGS_STORAGE ? undefined : storageName;
         const storage = node
             .context()
             .global
@@ -26,10 +31,7 @@ class TagStorage {
     constructor(node, storeName) {
         this.node = node;
         this.storeName = storeName;
-        this.storage = {
-            [exports.ROOT_STORAGE_PATH]: {},
-        };
-        const _storeName = this.storeName === exports.TAGS_STORAGE_MODULE ? undefined : this.storeName;
+        const _storeName = this.storeName === exports.DEFAULT_TAGS_STORAGE ? undefined : this.storeName;
         const storage = node
             .context()
             .global
@@ -45,7 +47,7 @@ class TagStorage {
         }
     }
     setContext() {
-        const _storeName = this.storeName === exports.TAGS_STORAGE_MODULE ? undefined : this.storeName;
+        const _storeName = this.storeName === exports.DEFAULT_TAGS_STORAGE ? undefined : this.storeName;
         this.node.context().global.set(exports.TAGS_STORAGE, this.storage, _storeName);
     }
     setStorage(path) {
@@ -110,6 +112,8 @@ class TagStorage {
 }
 exports.TagStorage = TagStorage;
 class CxTagEmitter {
+    static RED;
+    static tagStorages = {};
     static getAbsolutePath(tagStorageModule, parentPath, tagName) {
         parentPath = parentPath || exports.ROOT_STORAGE_PATH;
         return tagStorageModule + '/' + parentPath + '/' + tagName;
@@ -129,14 +133,14 @@ class CxTagEmitter {
     static subToChange(tagSubConfs, cb) {
         const unsubscribers = [];
         for (const conf of tagSubConfs) {
-            const storeName = conf.storageName || exports.TAGS_STORAGE_MODULE;
+            const storeName = conf.storageName || exports.DEFAULT_TAGS_STORAGE;
             const path = conf.path || exports.ROOT_STORAGE_PATH;
             unsubscribers.push(CxTagEmitter.subscribeToTagChanges(storeName, path, conf.name, cb));
         }
         return unsubscribers;
     }
     static emitTagValueChange(namesOfChangedTags, parentPath, tagStorageModule) {
-        tagStorageModule = tagStorageModule || exports.TAGS_STORAGE_MODULE;
+        tagStorageModule = tagStorageModule || exports.DEFAULT_TAGS_STORAGE;
         parentPath = parentPath || exports.ROOT_STORAGE_PATH;
         for (const changedTagName of namesOfChangedTags) {
             if (changedTagName == null)
@@ -149,7 +153,7 @@ class CxTagEmitter {
         eventEmitter.emit(allTagsAbsPath, namesOfChangedTags);
     }
     static setTag(tagName, newValue, parentPath, tagStorageModule) {
-        tagStorageModule = tagStorageModule || exports.TAGS_STORAGE_MODULE;
+        tagStorageModule = tagStorageModule || exports.DEFAULT_TAGS_STORAGE;
         parentPath = parentPath || exports.ROOT_STORAGE_PATH;
         const tagStorage = CxTagEmitter.tagStorages[tagStorageModule];
         const changedTag = setNewTagValueIfChanged(tagName, newValue, parentPath, tagStorage);
@@ -158,23 +162,23 @@ class CxTagEmitter {
         CxTagEmitter.emitTagValueChange([changedTag.name], parentPath, tagStorageModule);
     }
     static getTag(tagName, parentPath, tagStorageModule) {
-        tagStorageModule = tagStorageModule || exports.TAGS_STORAGE_MODULE;
+        tagStorageModule = tagStorageModule || exports.DEFAULT_TAGS_STORAGE;
         parentPath = parentPath || exports.ROOT_STORAGE_PATH;
         const tagStorage = CxTagEmitter.tagStorages[tagStorageModule];
-        const tag = tagStorage === null || tagStorage === void 0 ? void 0 : tagStorage.getTag(tagName, parentPath);
+        const tag = tagStorage?.getTag(tagName, parentPath);
         return tag;
     }
     static storageConfig(config, node) {
         node.tagStorage = new TagStorage(node, config.storeName);
         CxTagEmitter.tagStorages[config.storeName] = node.tagStorage;
-        const intervalId = setInterval(() => { var _a; return (_a = node.tagStorage) === null || _a === void 0 ? void 0 : _a.setContext(); }, 1000);
+        const intervalId = setInterval(() => node.tagStorage?.setContext(), 1000);
         node.on('close', () => clearInterval(intervalId));
         if (CxTagEmitter.RED.util.cxGetTag)
             return;
         CxTagEmitter.RED.util.cxGetTag = function (tagName, path, storageName) {
             if (!tagName)
                 return;
-            storageName = (!storageName || typeof storageName !== 'string') ? exports.TAGS_STORAGE_MODULE : storageName;
+            storageName = (!storageName || typeof storageName !== 'string') ? exports.DEFAULT_TAGS_STORAGE : storageName;
             const storage = TagStorage.getStoragesByGlobalContext(node, storageName);
             path = (!path || typeof path !== 'string') ? exports.ROOT_STORAGE_PATH : path;
             const container = storage[path];
@@ -301,9 +305,13 @@ class CxTagEmitter {
         }
         function buildMessage(topic, payload, path, additionalProps) {
             additionalProps = additionalProps || {};
-            return Object.assign(Object.assign({}, additionalProps), { topic,
+            return {
+                ...additionalProps,
+                topic,
                 payload,
-                path, storage: tagStorage.name });
+                path,
+                storage: tagStorage.name,
+            };
         }
         function handleError(text) {
             if (text) {
@@ -472,7 +480,6 @@ class CxTagEmitter {
         });
     }
 }
-CxTagEmitter.tagStorages = {};
 exports.default = CxTagEmitter;
 function addTagIfNotExist(tagId, path, tagStorage) {
     const tagFromStore = tagStorage.getTag(tagId, path);

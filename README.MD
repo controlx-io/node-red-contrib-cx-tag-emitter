@@ -11,6 +11,8 @@ Once `filesystem` context is used, tags will be stored in the file system and wi
 ## Usage
 Use `Tag-In` node to write tags. Use `Tag-Emit` node to subscribe to changes of the tag values.
 
+## Testing
+To run tests, use `npm test` command.
 
 ## TODOs
  - [ ] Add support for deleting tags

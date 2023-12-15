@@ -1,9 +1,11 @@
-import helper from "node-red-node-test-helper";
-import should from 'should';
-
-const emitterNode = require("./cx_tag_emitter.js");
-
-helper.init(require.resolve('node-red'), {
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const node_red_node_test_helper_1 = __importDefault(require("node-red-node-test-helper"));
+const emitterNode = require("./cx_tag_emitter_node");
+node_red_node_test_helper_1.default.init(require.resolve('node-red'), {
     adminAuth: undefined,
     apiMaxLength: undefined,
     credentialSecret: undefined,
@@ -42,33 +44,23 @@ helper.init(require.resolve('node-red'), {
     userDir: undefined,
     verbose: undefined,
     webSocketNodeVerifyClient: undefined,
-    functionGlobalContext: { },
+    functionGlobalContext: {},
     contextStorage: {
-        default: {module: "memory"},
+        default: { module: "memory" },
         fs: {
             module: "localfilesystem"
         }
     }
 });
-
 describe('Tag Emitter Node', function () {
-
     beforeEach(function (done) {
-        helper.startServer(done);
+        node_red_node_test_helper_1.default.startServer(done);
     });
-
     afterEach(function (done) {
-        helper.unload();
-        helper.stopServer(done);
+        node_red_node_test_helper_1.default.unload();
+        node_red_node_test_helper_1.default.stopServer(done);
     });
-
     it('should be loaded', function (done) {
-        // const flow = [
-        //     { id: "tagStorage", type: "tag-storage", name: "qwe"},
-        //     { id: "n1", type: "tags_in", name: "tags_in", wires: [["helperNode"]]},
-        //     { id: "helperNode", type: "helper" }
-        // ];
-
         const flow = [
             standardTagStorageNodeDef(),
             {
@@ -83,83 +75,39 @@ describe('Tag Emitter Node', function () {
                 "desc": "",
                 "deadband": "",
                 "isForcedEmit": false,
-                // "x": 580,
-                // "y": 200,
-                "wires": [ ["helper1-id"] ]
+                "wires": [["helper1-id"]]
             },
-            {"type": "helper", "id": "helper1-id"}
-        ]
-
-        helper.load(emitterNode, flow, function () {
-            const tagStorageNode = helper.getNode("tagStorage");
-            const tagsInNode = helper.getNode("825ce56df6d652e1");
-            const helperNode = helper.getNode("helper1-id");
+            { "type": "helper", "id": "helper1-id" }
+        ];
+        node_red_node_test_helper_1.default.load(emitterNode, flow, function () {
+            const tagStorageNode = node_red_node_test_helper_1.default.getNode("tagStorage");
+            const tagsInNode = node_red_node_test_helper_1.default.getNode("825ce56df6d652e1");
+            const helperNode = node_red_node_test_helper_1.default.getNode("helper1-id");
             let messageNumber = 1;
-
-
-            helperNode.on("input", function(msg: any) {
+            helperNode.on("input", function (msg) {
                 try {
                     msg.should.have.property('topic', 'this-is-custom-tag-name');
                     if (messageNumber === 1) {
-
                         msg.should.have.property('payload', 3);
                         msg.should.have.property('prevValue', null);
                         messageNumber = 2;
-
-                    } else {
+                    }
+                    else {
                         msg.should.have.property('payload', 5);
                         msg.should.have.property('prevValue', 3);
                         done();
                     }
-                } catch (e) {
+                }
+                catch (e) {
                     done(e);
                 }
-            })
-
-            // message 1
-            tagsInNode.receive({payload: 3});
-
-            // message 2
-            tagsInNode.receive({payload: 5});
-
-
-
-
-            // try {
-            //
-            //
-            //     tagStorageNode.should.have.property('name', 'qwe');
-            //     tagsInNode.should.have.property('name', 'tags_in');
-            //     done();
-            // } catch(err) {
-            //     done(err);
-            // }
+            });
+            tagsInNode.receive({ payload: 3 });
+            tagsInNode.receive({ payload: 5 });
         });
     });
-
-    // it('should make payload lower case', function (done) {
-    //     var flow = [
-    //         { id: "n1", type: "lower-case", name: "lower-case",wires:[["n2"]] },
-    //         { id: "n2", type: "helper" }
-    //     ];
-    //     helper.load(lowerNode, flow, function () {
-    //         var n2 = helper.getNode("n2");
-    //         var n1 = helper.getNode("n1");
-    //         n2.on("input", function (msg: any) {
-    //             try {
-    //                 msg.should.have.property('payload', 'uppercase');
-    //                 done();
-    //             } catch(err) {
-    //                 done(err);
-    //             }
-    //         });
-    //         n1.receive({ payload: "UpperCase" });
-    //     });
-    // });
 });
-
-
-
 function standardTagStorageNodeDef() {
-    return {"type": "tag-storage", "id": "tag-storage1-id", "name": "", "storeName": "fs"}
+    return { "type": "tag-storage", "id": "tag-storage1-id", "name": "", "storeName": "fs" };
 }
+//# sourceMappingURL=cx_tag_emitter_node_spec.js.map

@@ -9,7 +9,7 @@
     "moduleResolution": "node",
     "sourceMap": true,
     "removeComments": true,
-    "baseUrl": "."
+    "baseUrl": "./"
   },
   "assets": [
     "nodes-src/**/*.json"
